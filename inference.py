@@ -8,8 +8,8 @@ import matplotlib.ticker as ticker
 
 from dataset import MemeDatasetFromFile
 from logger import Logger
-from models import EncoderCNN, DecoderLSTM
-from utils import save_checkpoint, load_checkpoint
+from models_captioning import EncoderCNN, DecoderLSTM
+from utils_functions import save_checkpoint, load_checkpoint
 
 from torch.utils.data import Dataset, DataLoader
 
