@@ -12,9 +12,8 @@ from torch.utils.data import Dataset
 from PIL import Image
 from io import BytesIO
 import numpy as np
+import pandas as pd
 from collections import Counter, OrderedDict
-import random
-
 
 import matplotlib.pyplot as plt
 
@@ -23,7 +22,7 @@ if torch.cuda.is_available():
     device = torch.device('cuda')
 
 
-class MemeDatasetFromFile(Dataset):
+class FlickrDataset(Dataset):
     SOS_token = 1
     EOS_token = 2
     UNK_token = 3
@@ -36,21 +35,24 @@ class MemeDatasetFromFile(Dataset):
             json_file (str): Path to the JSON file containing meme data.
             transform (callable, optional): Optional data transformations (e.g., resizing, normalization).
         """
-        self.json_file = json_file
-        self.json_voc = "data/memes-voc.json"
         # self.mean, self.std = self.calculate_mean_std()
+        # print(self.mean)
+        # print(self.std)
         # self.transform = transforms.Compose([transforms.Resize((300, 300)),  # Example: Resize to 224x224
         #                                      transforms.ToTensor(),
         #                                      transforms.Normalize([0.5471, 0.5182, 0.49696], [0.2940, 0.2934, 0.2992])])
         self.transform = transforms.Compose([transforms.Resize((256, 256)),  # Example: Resize to 224x224
                                              transforms.ToTensor(),
-                                             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-                                             ])
+                                             transforms.Normalize([0.4580, 0.4460, 0.4039]
+                                            ,[0.2421, 0.2332, 0.2371]),
+                                             transforms.RandomHorizontalFlip()])
         # transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-        self.data = self.load_data_from_json(self.json_file)
-        self.data_voc = self.load_data_from_json(self.json_voc)
-        self.meme_name = [item['img_fname'] for item in self.data]
-        self.titles_voc = [item['title'] for item in self.data_voc]
+        caption_file = 'flickr' + '/captions.txt'
+        self.data = pd.read_csv(caption_file)
+        self.imgs = self.data["image"]
+        self.captions = self.data["caption"]
+        print("There are {} image to captions".format(len(self.data)))
+        print(self.data.head())
         # print(self.meme_name)
         # print(len(self.meme_name))
         # print(len(self.titles_voc))
@@ -61,11 +63,12 @@ class MemeDatasetFromFile(Dataset):
         self.word2count = {}
         self.index2count = {}
         self.index2word = {0: "PAD", 1: "SOS", 2: "EOS", 3:'UNK'}
-        self.n_words = 3  # Count SOS and EOS
+        self.n_words = 4  # Count SOS and EOS and PAD and UNK
 
         if voc_init:
             self.voc = self.create_vocab()
-            # print(len(self.voc))
+            print(len(self.voc))
+            print(self.voc)
             f = open("vocab.txt", "w")
             f.write(str(self.voc))
             f.close()
@@ -82,9 +85,9 @@ class MemeDatasetFromFile(Dataset):
         stds_g = []
         stds_b = []
 
-        for filename in os.listdir("img_meme/memes/"):
+        for filename in os.listdir("flickr/Images/"):
             if filename.endswith('.jpg') or filename.endswith('.png'):  # check for image files
-                img = Image.open(os.path.join("img_meme/memes/", filename)).convert('RGB')
+                img = Image.open(os.path.join("flickr/Images/", filename)).convert('RGB')
                 img_array = np.array(img) / 255.0  # normalize pixel values to [0, 1]
                 means_r.append(np.mean(img_array[:, :, 0]))
                 means_g.append(np.mean(img_array[:, :, 1]))
@@ -112,7 +115,7 @@ class MemeDatasetFromFile(Dataset):
             self.word2count[word] = 1
         else:
             self.word2count[word] += 1
-            if self.word2count[word] > 2 and word not in self.word2index:  # threshold
+            if self.word2count[word] >= 2 and word not in self.word2index:  # threshold
                 self.word2index[word] = self.n_words
                 self.index2word[self.n_words] = word
                 self.n_words += 1
@@ -120,12 +123,8 @@ class MemeDatasetFromFile(Dataset):
 
     def create_vocab(self):
         # titles = [item['title'] for item in self.data_voc]
-        meme_captions = [item['meme_captions'] for item in self.data_voc]
-        meme_captions = [x for xs in meme_captions for x in xs]
-        img_captions = [item['img_captions'] for item in self.data_voc]
-        img_captions = [x for xs in img_captions for x in xs]
-        # print(titles)
-        all_words = list(itertools.chain(meme_captions, img_captions))
+        meme_captions = self.data["caption"].tolist()
+        all_words = meme_captions
         # print(all_words)
 
         # Normalize each word, and add to vocab
@@ -159,8 +158,6 @@ class MemeDatasetFromFile(Dataset):
         return s.strip()
 
     def tokenize_sentence(self, sentence):
-        # print(sentence)
-        # print(len(sentence))
         tokenized_sentence = []
         max_length = []
         for text in sentence:
@@ -180,8 +177,6 @@ class MemeDatasetFromFile(Dataset):
             tokenized_sentence.append(max_size)
 
         # If multiple captions, choose randomly from choice
-        random_choice = random.choice(tokenized_sentence)
-        tokenized_sentence = [random_choice]
         return tokenized_sentence, max(max_length)
 
     def load_data_from_json(self, file):
@@ -193,28 +188,26 @@ class MemeDatasetFromFile(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        meme_info = self.data[idx]
-
-        image_path = "img_meme/memes/"
-        image = Image.open(os.path.join(image_path, self.meme_name[idx])).convert('RGB')
+        caption = self.captions[idx]
+        # print([caption])
+        img_name = self.imgs[idx]
+        img_location = os.path.join('flickr/Images', img_name)
+        image= Image.open(img_location).convert("RGB")
         # plt.imshow(image)
-        # plt.axis("off")  # Hide axes
         # plt.show()
-        # title, max_title = self.tokenize_sentence([meme_info["title"]])
-        meme_captions, max_caption = self.tokenize_sentence(meme_info["meme_captions"])
-        img_captions, max_img = self.tokenize_sentence(meme_info["img_captions"])
+        img_captions, max_caption = self.tokenize_sentence([caption])
 
         if self.transform:
             image = self.transform(image).to(device)
 
         return {
             "image": image,
-            "title": torch.tensor(np.array(meme_captions), dtype=torch.long, device=device),
-            "meme_captions": torch.tensor(np.array(meme_captions), dtype=torch.long, device=device),
+            "title": torch.tensor(np.array(img_captions), dtype=torch.long, device=device),
+            "meme_captions": torch.tensor(np.array(img_captions), dtype=torch.long, device=device),
             "img_captions": torch.tensor(np.array(img_captions), dtype=torch.long, device=device),
             "valid": True,
             "max_caption":max_caption,
-            "max_img":max_img
+            "max_img":max_caption
         }
 
 
@@ -223,10 +216,10 @@ if __name__ == "__main__":
     path_test = "data/memes-test.json"
     path_train = "data/memes-trainval.json"
 
-    train_dataset = MemeDatasetFromFile(path_train)  # Add your image transformations if needed
+    train_dataset = FlickrDataset(path_train)  # Add your image transformations if needed
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=1, shuffle=False)
 
     instances = 0
     for batch in train_dataloader:
-        instances += 1
+            instances += 1
     print(instances)

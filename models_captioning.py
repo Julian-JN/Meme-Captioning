@@ -6,6 +6,11 @@ import math
 import random
 import wandb
 import matplotlib.pyplot as plt
+
+#from transformers import CLIPProcessor, CLIPModel, CLIPVisionModel
+
+
+from efficientnet_pytorch import EfficientNet
 import matplotlib.patches as patches
 from torchvision import transforms
 
@@ -39,24 +44,30 @@ class LearnedPooling(nn.Module):
 class EncoderCNN(nn.Module):
     def __init__(self, backbone='vgg16'):
         super(EncoderCNN, self).__init__()
+
+
+        # self.efficientnet = EfficientNet.from_pretrained('efficientnet-b0')
+        # torch.save(self.efficientnet.state_dict(), 'checkpoint/efficient_weights.pth')
+        # self.efficientnet._avg_pooling = nn.Identity()
+        # self.efficientnet._fc = nn.Identity()
+        # for param in self.efficientnet.parameters():
+        #     param.requires_grad = False
+        #     for param in list(self.efficientnet.parameters())[-2:]:
+        #         param.requires_grad = True
+        # self.features = self.efficientnet
+
         # self.cnn_model = torchvision.models.vgg16(pretrained=True)
         # torch.save(self.cnn_model.state_dict(), 'checkpoint/model_weights.pth')
-
-        self.resnet = torchvision.models.resnet101()
-        self.resnet.load_state_dict(torch.load("checkpoint/resnet_weights.pth"))
-        # torch.save(self.resnet.state_dict(), 'checkpoint/resnet_weights.pth')
-        # for p in self.resnet.parameters():
-        #     p.requires_grad = False
         # self.cnn_model = torchvision.models.vgg16()  # we do not specify ``weights``, i.e. create untrained model
         # self.cnn_model.load_state_dict(torch.load("checkpoint/model_weights.pth"))
         # self.cnn_model.eval()
 
-        self.faster_rcnn = torchvision.models.detection.fasterrcnn_resnet50_fpn()
-        self.faster_rcnn.load_state_dict(torch.load("checkpoint/faster_rcnn_model_weights.pth"))
-        self.faster_rcnn.eval()
+        # self.faster_rcnn = torchvision.models.detection.fasterrcnn_resnet50_fpn()
+        # self.faster_rcnn.load_state_dict(torch.load("checkpoint/faster_rcnn_model_weights.pth"))
+        # self.faster_rcnn.eval()
 
-        for name, p in self.faster_rcnn.named_parameters():
-            p.requires_grad = False
+        # for name, p in self.faster_rcnn.named_parameters():
+        #     p.requires_grad = False
 
         # self.yolo = torch.hub.load('ultralytics/yolov5', 'yolov5s')
         # torch.save(self.yolo.state_dict(), 'checkpoint/yolo_weights.pth')
@@ -77,49 +88,64 @@ class EncoderCNN(nn.Module):
             'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush'
         ]
 
-        # self.resnet = torchvision.models.resnet152()
-        # self.resnet.load_state_dict(torch.load("checkpoint/resnet_weights.pth"))
-        # for name, p in self.cnn_model.named_parameters():
-        #     print(name)
-        #     if not name.startswith('features.28') or not name.startswith('features.26'):
-        #         p.requires_grad = False
-        #     else:
-        #         p.requires_grad = True
+        if backbone == "resnet":
+            self.resnet = torchvision.models.resnet101()
+            # torch.save(self.resnet.state_dict(), 'checkpoint/resnet_weights.pth')
+            self.resnet.load_state_dict(torch.load("checkpoint/resnet_weights.pth"))
+            self.features = nn.Sequential(*list(self.resnet.children())[:-2])
+            print(list(self.features.children()))
 
-        # print(list(self.cnn_model.features.children()))
-        # self.features = nn.Sequential(*list(self.cnn_model.features.children()))
+            for p in self.features.parameters():
+                p.requires_grad = False
+                # If fine-tuning, only fine-tune convolutional blocks 2 through 4
+            for c in list(self.features.children())[5:]:
+                for p in c.parameters():
+                    p.requires_grad = True
 
-        # print(list(self.resnet.children()))
-        self.features = nn.Sequential(*list(self.resnet.children())[:-2])
-        print(list(self.features.children()))
+        if backbone == "efficientnet":
+            self.model = EfficientNet.from_pretrained('efficientnet-b0') # Load a pretrained EfficientNet model
+            self.model._avg_pooling = nn.Identity()
+            self.model._dropout = nn.Identity()
+            num_features = self.model._fc.in_features
+            print(num_features)
+            self.model._fc = nn.Identity()
 
-        for p in self.features.parameters():
-            p.requires_grad = False
-            # If fine-tuning, only fine-tune convolutional blocks 2 through 4
-        for c in list(self.features.children())[5:]:
-            for p in c.parameters():
-                p.requires_grad = True
+
+        # if backbone == "clip":
+        #     # model_name = "openai/clip-vit-base-patch32"
+        #     model_name = "openai/clip-vit-base-patch16"
+        #     # self.clip = CLIPModel.from_pretrained(model_name)
+        #     self.clip = CLIPVisionModel.from_pretrained(model_name)
+        #     # processing = CLIPProcessor.from_pretrained(model_name)
+
 
         self.adaptive_pool = nn.AdaptiveAvgPool2d((14, 14))
+        # print(list(self.features.parameters()))
 
         # torch.save(self.features.state_dict(), 'checkpoint/resnet_weights.pth')
         # self.linear_embed = nn.Linear(5632, 512) # 41472, 32768
-        # self.dropout = nn.Dropout(0.2)
 
         # self.learn_pool = LearnedPooling(512,512)
         # self.conv1d = nn.Conv1d(in_channels=1, out_channels=64, kernel_size=3, padding=1) (1, 131072)
-        # self.attention = AttentionMultiHead(131072, 512,4)
+        # self.attention = AttentionMultiHead(2048, 2048,4)
 
         # self.avgpool = self.cnn_model.avgpool
 
     def forward(self, input, plot_features=False):
         # print("Input")
         # print(input.shape)
-        # print(input.shape)
-        x = self.features(input)
+        # x = self.features(input[0].unsqueeze(0))
+        x = self.model.extract_features(input[0].unsqueeze(0))
+
+        # with torch.no_grad():
+            # x = self.clip.get_image_features(pixel_values=input)
+            # x,y = self.clip(pixel_values=input, return_dict=False)
+            # print(y.shape)
+            # print(x.shape)
+
         # print(x.shape)
         if plot_features:
-            np_image = input.squeeze().permute(1, 2, 0).cpu().numpy()
+            np_image = input[0].unsqueeze(0).squeeze().permute(1, 2, 0).cpu().numpy()
             fig = plt.figure()
             plt.imshow(np_image)
             wandb.log({"Extracted features": wandb.Image(fig)})
@@ -137,10 +163,8 @@ class EncoderCNN(nn.Module):
                 plt.close(fig)
 
         # self.faster_rcnn.eval()
-        # # print(self.faster_rcnn.training)
         # with torch.no_grad():
         #     object_features = self.faster_rcnn(input)
-        #
         # boxes = object_features[0]['boxes'][:5]
         # labels = object_features[0]['labels'][:5]
         # # print(len(labels))
@@ -159,7 +183,7 @@ class EncoderCNN(nn.Module):
         # #     plt.show()
         #
         # # Extract features for each object detected
-        # object_features = []
+        object_features = []
         # if len(labels) > 0:
         #     for box in boxes:
         #         cropped_image = input[:, :, int(box[1]):int(box[3]), int(box[0]):int(box[2])]
@@ -188,8 +212,9 @@ class EncoderCNN(nn.Module):
         #
         #         object_feature = self.adaptive_pool(
         #             object_feature)  # (batch_size, 2048, encoded_image_size, encoded_image_size)
-        #         object_feature = object_feature.view(1, 2048, -1).transpose(1, 2)
-        #
+        #         object_feature = object_feature.permute(0, 2, 3, 1)
+        #         object_feature = object_feature.contiguous().view(object_feature.size(0), -1,
+        #                                                                       object_feature.size(-1))
         #         # print(object_feature.shape)
         #         object_features.append(object_feature)
         # else:  # if no object divide image into equal parts
@@ -215,10 +240,15 @@ class EncoderCNN(nn.Module):
         #             object_feature = object_feature.view(1, 2048, -1).transpose(1, 2)
         #             object_features.append(object_feature)
         # print("CONCAT PART")
-        whole_image_features = self.features(input)
+        # whole_image_features = self.features(input)
+        whole_image_features = self.model.extract_features(input)
         whole_image_features = self.adaptive_pool(
             whole_image_features)  # (batch_size, 2048, encoded_image_size, encoded_image_size)
-        whole_image_features = whole_image_features.view(1, 2048, -1).transpose(1, 2)
+        whole_image_features = whole_image_features.permute(0, 2, 3, 1)
+        whole_image_features = whole_image_features.contiguous().view(whole_image_features.size(0), -1,  whole_image_features.size(-1))
+
+        # with torch.no_grad():
+        # whole_image_features,_ = self.clip(pixel_values=input, return_dict=False)
 
         # whole_image_features = whole_image_features.mean(dim=[2, 3]).unsqueeze(1)
 
@@ -229,38 +259,38 @@ class EncoderCNN(nn.Module):
         # whole_image_features = torch.nn.functional.pad(whole_image_features, (0, max_len - len(whole_image_features)))
         # object_features = [torch.nn.functional.pad(x, (0, max_len - len(x))) for x in object_features]
 
-        # features = torch.cat([whole_image_features] + object_features, dim=1)
         # print(f"Image Max: {torch.max(whole_image_features)}, Min: {torch.min(whole_image_features)}")
+        # features = torch.cat([whole_image_features] + object_features, dim=1)
         return whole_image_features
+
 
 class BahdanauAttention(nn.Module):
     def __init__(self, hidden_size):
         super(BahdanauAttention, self).__init__()
         self.W1 = nn.Linear(hidden_size, hidden_size)
-        self.W2 = nn.Linear(2048, hidden_size)
+        self.W2 = nn.Linear(1280, hidden_size)  # 2048 for resnet101
         self.Va = nn.Linear(hidden_size, 1)
+        self.apply(self.init_weights)
+
+    def init_weights(self, m):
+        if type(m) == nn.Linear:
+            nn.init.xavier_uniform_(m.weight)
+            m.bias.data.fill_(0.01)
 
     def forward(self, query, keys):
         if type(query) is tuple:
             query, _ = query
-        # print("Attention")
+
         # print(query.shape)
         # print(keys.shape)
         hidden = self.W1(query)
         encoder = self.W2(keys)
         # print(hidden.shape)
         # print(encoder.shape)
-        scores = self.Va(torch.tanh(hidden + encoder)).squeeze(2)
-        # scores = scores.squeeze(2).unsqueeze(1)
+        scores = self.Va(torch.relu(hidden.unsqueeze(1) + encoder)).squeeze(2)
         # print(scores.shape)
-
         weights = F.softmax(scores, dim=1)
-        # print("Weights")
-        # print(weights.sum(dim=1))
-        # print(weights.shape)
-        context = (keys * weights.unsqueeze(2)).sum(dim=1).unsqueeze(1)
-        # print(context.shape)
-        # context = torch.bmm(weights, keys)
+        context = (keys * weights.unsqueeze(2)).sum(dim=1)
         return context, weights
 
 
@@ -294,13 +324,20 @@ class SelfAttention(nn.Module):
         self.key_linear = nn.Linear(in_features=input_size, out_features=out_size)
         self.value_linear = nn.Linear(in_features=input_size, out_features=out_size)
         self.softmax = nn.Softmax()
+        self.apply(self.init_weights)
         return
+
+    def init_weights(self, m):
+        if type(m) == nn.Linear:
+            nn.init.xavier_uniform_(m.weight)
+            m.bias.data.fill_(0.01)
 
     def forward(self, input_vector):
         query_out = F.relu(self.query_linear(input_vector))
         key_out = F.relu(self.key_linear(input_vector))
 
         value_out = F.relu(self.value_linear(input_vector))
+        # out_q_k = torch.bmm(query_out, key_out.transpose(1, 2))
         out_q_k = torch.div(torch.bmm(query_out, key_out.transpose(1, 2)), math.sqrt(self.dk_size))
         softmax_q_k = self.softmax(out_q_k)
         out_combine = torch.bmm(softmax_q_k, value_out)
@@ -312,45 +349,82 @@ class DecoderLSTM(nn.Module):
     SOS_token = 1
     EOS_token = 2
 
-    def __init__(self, hidden_size, output_size, num_layers=1, dropout_p=0.1):
+    def __init__(self, hidden_size, embed_size, output_size, num_layers=1, dropout_p=0.1, vocab=None):
         super(DecoderLSTM, self).__init__()
-        self.embedding = nn.Embedding(output_size, hidden_size)
-        self.dropout = nn.Dropout(0.2)
-        self.LSTM = nn.LSTM(hidden_size + 2048, hidden_size, num_layers, batch_first=True)
+        if vocab is None:
+            self.embedding = nn.Embedding(output_size, embed_size)
+        # else:
+        #     glove = GloVe(name='6B', dim=300)
+        #     self.embedding = nn.Embedding(output_size, 300)
+        #     print(output_size)
+        #     print(len(vocab.index2word))
+        #     # print(vocab.index2word)
+        #
+        #     # Initialize the embedding layer with the GloVe embedding weights
+        #     not_glove = 0
+        #     for i, word in enumerate(vocab.index2word):  # itos: index-to-string
+        #         # print(word)
+        #         word = vocab.index2word[i]
+        #         # print(word)
+        #         if word in glove.stoi:  # stoi: string-to-index
+        #             self.embedding.weight.data[i] = glove[word]
+        #         else:
+        #             # print(word)
+        #             not_glove += 1
+        #             # For words not in the pretrained vocab, initialized them randomly
+        #             self.embedding.weight.data[i] = torch.randn(300)
+        #     print(f"Not in GLOVE: {not_glove}")
+        #     self.embedding.weight.requires_grad = False
+
+        self.dropout = nn.Dropout(0.5)
+        self.LSTM = nn.LSTMCell(embed_size + 1280, hidden_size)
+        # self.LSTM = nn.LSTM(embed_size + 2048, hidden_size, num_layers, batch_first=True)
         self.out = nn.Linear(hidden_size, output_size)  # 2 for direction and 2 for image/hidden concat
         self.num_layers = num_layers
         self.attention = BahdanauAttention(hidden_size)
         # self.attention = SelfAttention(hidden_size)
-        self.attention_function = self.forward_step
+        # self.attention_function = self.forward_step
         self.attention_function = self.forward_step_bahdanau
         # self.attention_function = self.forward_step_self
-        self.init_h = nn.Linear(2048, hidden_size)  # linear layer to find initial hidden state of LSTMCell
-        self.init_c = nn.Linear(2048, hidden_size)  # linear layer to find initial cell state of LSTMCell
+        self.init_h = nn.Linear(1280, hidden_size)  # linear layer to find initial hidden state of LSTM
+        self.init_c = nn.Linear(1280, hidden_size)  # linear layer to find initial cell state of LSTM
+        # self.bn = nn.BatchNorm1d(hidden_size)
 
-        self.s_gate = nn.Linear(hidden_size, 2048)  # linear layer to create a sigmoid-activated gate
+        self.s_gate = nn.Linear(hidden_size, 1280)  # linear layer to create a sigmoid-activated gate
         self.sigmoid = nn.Sigmoid()
         ####################################################
         # init weights
-        total_weights = 0
-        for x in self.named_parameters():
-            if 'weight' in x[0]:
-                if 'batch' not in x[0]:
-                    torch.nn.init.xavier_uniform_(x[1])
-            elif 'bias' in x[0]:
-                x[1].data.fill_(0.01)
-            total_weights += x[1].numel()
-        print("A total of {0:d} parameters in LSTM".format(total_weights))
+        self.apply(self.init_weights)
+        # self.attention_features = AttentionMultiHead(2048, 2048,4)
 
-        self.embedding.weight.data.uniform_(-0.1, 0.1)
-        self.out.bias.data.fill_(0)
-        self.out.weight.data.uniform_(-0.1, 0.1)
+
+        # total_weights = 0
+        # for x in self.named_parameters():
+        #     if 'weight' in x[0]:
+        #         if 'batch' not in x[0]:
+        #             torch.nn.init.xavier_uniform_(x[1])
+        #     elif 'bias' in x[0]:
+        #         x[1].data.fill_(0.01)
+        #     total_weights += x[1].numel()
+        # print("A total of {0:d} parameters in LSTM".format(total_weights))
+
+        # self.embedding.weight.data.uniform_(-0.1, 0.1)
+        # self.out.bias.data.fill_(0)
+        # self.out.weight.data.uniform_(-0.1, 0.1)
         ####################################################
+
+    def init_weights(self, m):
+        if type(m) == nn.Linear:
+            nn.init.xavier_uniform_(m.weight)
+            m.bias.data.fill_(0.01)
 
     def forward(self, feature_outputs, caption, target_tensor=None, max_caption=80):
         # target_tensor = None
         # target_tensor_img = None
         # print(target_tensor.shape)
+        # print(max_caption)
         # print(target_tensor_img.shape)
+        # feature_outputs = self.attention_features(feature_outputs)
         caption_outputs, hidden, attention = self.generate_caption(feature_outputs, caption, target_tensor,
                                                                    max_length=max_caption)
         return caption_outputs, hidden, attention
@@ -359,22 +433,25 @@ class DecoderLSTM(nn.Module):
         decoder_outputs = []
         attentions = []
         batch_size = caption.size(0)
-        num_captions = caption.size(1)
-        max_length = max_length
+
+        max_length = max(max_length)
         # print(max_length)
         # print(num_captions)
-        decoder_input = torch.empty(batch_size, num_captions, dtype=torch.long, device=device).fill_(self.SOS_token)
+        target_embed = self.embedding(caption)
+        # print(target_embed.shape)
+        decoder_input_start = torch.empty(batch_size, dtype=torch.long, device=device).fill_(self.SOS_token)
+        decoder_input = self.embedding(decoder_input_start)
+        # print(decoder_input.shape)
+
         # feature_outputs = feature_outputs.repeat(1, num_captions, 1)  # num_layers and 2 for direction
 
         decoder_hidden = feature_outputs
 
         for i in range(max_length):
             if i == 0:
-                # decoder_output, decoder_hidden = self.forward_step(decoder_input, decoder_hidden, True, mode)
                 decoder_output, decoder_hidden, attn_weights = self.attention_function(decoder_input, decoder_hidden,
                                                                                        feature_outputs, True)
             else:
-                # decoder_output, decoder_hidden = self.forward_step(decoder_input, decoder_hidden, False, mode)
                 decoder_output, decoder_hidden, attn_weights = self.attention_function(decoder_input, decoder_hidden,
                                                                                        feature_outputs, False)
             decoder_outputs.append(decoder_output)
@@ -382,84 +459,83 @@ class DecoderLSTM(nn.Module):
             if target_tensor is not None:
                 probability = random.random()
                 if probability < 0.5:
-                    decoder_input = target_tensor[:, :, i]  # Teacher forcing
+                    decoder_input = target_embed[:, i,:]  # Teacher forcing
                 else:
-                    _, topi = decoder_output.topk(3)
-                    indices = torch.randint(3, (1, num_captions, 1)).to(device)
-                    decoder_input = torch.gather(topi, dim=2, index=indices).squeeze(-1).detach()
+                    # _, topi = decoder_output.topk(1)
+                    # indices = torch.randint(1, (batch_size, 1)).to(device)
+                    # decoder_input = torch.gather(topi, dim=1, index=indices).squeeze(-1).detach()
+                    # decoder_input = self.embedding(decoder_input)
+                    _, topi = decoder_output.topk(1)
+                    decoder_input = topi.squeeze(-1).detach()
+                    decoder_input = self.embedding(decoder_input)
+                    # print(decoder_input.shape)
+
+
             else:  # validation/no teacher forcing
-                _, topi = decoder_output.topk(3)
-                indices = torch.randint(3, (1, num_captions, 1)).to(device)
-                # print(indices)
-                decoder_input = torch.gather(topi, dim=2, index=indices).squeeze(-1).detach()
+                _, topi = decoder_output.topk(1)
+                decoder_input = topi.squeeze(-1).detach()
+                decoder_input = self.embedding(decoder_input)
+                # _, topi = decoder_output.topk(1)
+                # indices = torch.randint(1, (batch_size, 1)).to(device)
+                # decoder_input = torch.gather(topi, dim=1, index=indices).squeeze(-1).detach()
+                # decoder_input = self.embedding(decoder_input)
+
                 # decoder_input = topi.squeeze(-1).detach()  # detach from history as input
                 # print(decoder_input.shape)
-                # get top 10 and choose randomly
-
-        decoder_outputs = torch.cat(decoder_outputs, dim=0).permute(1, 0, 2)
-        decoder_outputs = F.log_softmax(decoder_outputs, dim=-1)
+        # print(decoder_outputs[0].shape)
+        decoder_outputs = torch.cat([tensor.unsqueeze(1) for tensor in decoder_outputs], dim=1)
+        # print(decoder_outputs.shape)
+        # decoder_outputs = F.log_softmax(decoder_outputs, dim=-1)
         if attentions[0] is not None:
-            attentions = torch.cat(attentions, dim=0)
+            attentions = torch.cat([tensor.unsqueeze(1) for tensor in attentions], dim=1)
         else:
             attentions = None
         # print(attentions.shape)
         return decoder_outputs, decoder_hidden, attentions  # We return `None` for consistency in the training loop
 
-    def forward_step(self, input, hidden, image, image_feature, mode):
-        # print(input.shape)
-        input = self.dropout(self.embedding(input))
-        input = F.relu(input)
-        # print(input.shape)
-        # Test add image to hidden state
+    def forward_step(self, input, hidden, image, image_feature):
+        mean_encoder_out = image.mean(dim=1)
         if type(hidden) is tuple:
             hidden, cell = hidden
-        # combined_input = torch.cat((input, image), dim=2)
-        mean_encoder_out = image.mean(dim=1).unsqueeze(1)
-        mean_encoder_out = mean_encoder_out.repeat(self.num_layers, 1, 1)  # num_layers and 2 for direction
-        # print(mean_encoder_out.shape)
         if image_feature:
             hidden = self.init_h(mean_encoder_out)  # (batch_size, decoder_dim)
             cell = self.init_c(mean_encoder_out)
-            output, hidden = self.LSTM(input, (hidden, cell))
-        else:
-            output, hidden = self.LSTM(input, (hidden, cell))
-        if mode == "img":
-            # print("Image")
-            output = self.out_img(output)
-        else:
-            output = self.out(output)
-        # print(output.shape)
-        return output, hidden, hidden
+            # cell = torch.zeros_like(hidden)
+            # hidden = torch.zeros_like(hidden)
+
+        # print("Forward")
+        # print(context.shape)
+        # print(input.shape)
+        # print(mean_encoder_out.shape)
+        # print(context.shape)
+        # print(input_lstm.shape)
+        hidden, cell = self.LSTM(input, (hidden, cell))
+        output = self.out(self.dropout(hidden))
+        return output, (hidden, cell), output
 
     def forward_step_bahdanau(self, input, hidden, image, image_feature):
-        # print("Forward step")
-        # print(image.shape)
-        # print(input.shape)
-        input = self.dropout(self.embedding(input))
-        input = F.relu(input)
-        # print(image.shape)
-        # query = hidden.permute(1, 0, 2)
-        mean_encoder_out = image.mean(dim=1).unsqueeze(1)
-        mean_encoder_out = mean_encoder_out.repeat(self.num_layers, 1, 1)  # num_layers and 2 for direction
-
+        mean_encoder_out = image.mean(dim=1)
         if type(hidden) is tuple:
             hidden, cell = hidden
         if image_feature:
-            # print(f"Image Mean Max: {torch.max(mean_encoder_out)}, Min: {torch.min(mean_encoder_out)}")
             hidden = self.init_h(mean_encoder_out)  # (batch_size, decoder_dim)
             cell = self.init_c(mean_encoder_out)
+            # cell = torch.zeros_like(hidden)
+            # hidden = torch.zeros_like(hidden)
 
         context, attn_weights = self.attention(hidden, image)
-        context = context.repeat(1, input.size(1), 1)
+        # print("Forward")
+        # print(context.shape)
+        # print(input.shape)
+        # print(mean_encoder_out.shape)
         gate = self.sigmoid(self.s_gate(hidden))
         context = context * gate
         # print(context.shape)
-        input_lstm = torch.cat((input, context), dim=2)
+        input_lstm = torch.cat((input, context), dim=1)
         # print(input_lstm.shape)
-        output, hidden = self.LSTM(input_lstm, (hidden, cell))
-
-        output = self.out(self.dropout(output))
-        return output, hidden, attn_weights
+        hidden, cell = self.LSTM(input_lstm, (hidden, cell))
+        output = self.out(self.dropout(hidden))
+        return output, (hidden,cell), attn_weights
 
     def forward_step_self(self, input, hidden, image, image_feature, mode):
         input = self.dropout(self.embedding(input))
@@ -494,26 +570,3 @@ class DecoderLSTM(nn.Module):
             output = self.out(combined)
 
         return output, hidden, context
-
-    # def forward_step(self, input, hidden, image_feature, mode):
-    #
-    #     input = self.embedding(input)
-    #     input = F.relu(input)
-    #     # print("Input")
-    #     # print(input.shape)
-    #     if image_feature and mode != "img":
-    #         output, hidden = self.LSTM(input, (hidden, hidden))
-    #     elif image_feature and mode == "img":
-    #         output, hidden = self.LSTM_img(input, (hidden, hidden))
-    #     elif not image_feature and mode != "img":
-    #         output, hidden = self.LSTM(input, hidden)
-    #     elif not image_feature and mode == "img":
-    #         output, hidden = self.LSTM_img(input, hidden)
-    #     if mode == "img":
-    #         # print("Image")
-    #         output = self.out_img(output)
-    #
-    #     else:
-    #         output = self.out(output)
-    #
-    #     return output, hidden
