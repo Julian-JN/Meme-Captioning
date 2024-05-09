@@ -27,7 +27,6 @@ from torch.nn.utils.rnn import pack_padded_sequence
 # from gensim.models import Word2Vec
 
 
-
 torch.manual_seed(0)
 
 # os.environ['https_proxy'] = "http://hpc-proxy00.city.ac.uk:3128"  # Proxy to train with hyperion
@@ -54,26 +53,19 @@ def visualize_att(image, seq, alphas, smooth=False, mode="cap"):
     image = image.resize([14 * 24, 14 * 24], Image.LANCZOS)
     # Only plot first element from batch
     caption = seq[0]
-    # print(caption)
     words = caption
-    # print(alphas.shape)
-    # alphas = alphas[:, :-1]  # remove last weight for resize/visualisation reasons
     for t in range(len(words)):
         if t > 50:
             break
-        # plt.subplot(int(np.ceil(len(words) / 5.)), 5, t + 1)
         fig = plt.figure()
         plt.text(0, 1, '%s' % (words[t]), color='black', backgroundcolor='white', fontsize=12)
         plt.imshow(image)
         current_alpha = alphas[0,t, :]
-        # print(current_alpha.shape)
         if current_alpha.size(0) == 196:
-            current_alpha = current_alpha.view(-1, 14, 14).squeeze(0) # mean if object detections
+            current_alpha = current_alpha.view(-1, 14, 14).squeeze(0)
         else:
-            current_alpha = current_alpha.view(-1, 14, 14).squeeze(0).mean(0) # mean if object detectio  included
+            current_alpha = current_alpha.view(-1, 14, 14).squeeze(0).mean(0) # mean if object detection included
 
-        # alpha = np.reshape(current_alpha, (224, 224))  # Resize to image dimensions
-        # print(current_alpha.shape)
         if smooth:
             alpha = skimage.transform.pyramid_expand(current_alpha.cpu().numpy(), upscale=24, sigma=8)
         else:
@@ -142,14 +134,10 @@ def calculate_bleu(target, predicted):
 
 def token2text(output, voc):
     EOS_token = 2
-    UNK = 3
     _, topi = output.topk(1)
     decoded_ids = topi.squeeze(-1)
-    # print(decoded_ids)
-    # print(decoded_ids.shape)
     decoded_words_total = []
     limit = decoded_ids.size(0)
-    # print(limit)
     for i in range(limit):
         decoded_words = []
         caption = decoded_ids[i]
@@ -164,10 +152,8 @@ def token2text(output, voc):
 
 def target2text(target, voc): # for BLEU EVALUATION
     EOS_token = 2
-    UNK = 3
     decoded_words_total = []
     limit = target.size(0)
-    # print(limit)
     for i in range(limit):
         decoded_words = []
         caption = target[i]
@@ -181,7 +167,7 @@ def target2text(target, voc): # for BLEU EVALUATION
     return decoded_words_total
 
 
-def val_epoch(dataloader, encoder, decoder_cap, decoder_img, criterion, output_lang):
+def val_epoch(dataloader, encoder, decoder_cap, criterion, output_lang):
     total_loss = 0
     total_samples = 0
     bleu_total = 0
@@ -190,7 +176,6 @@ def val_epoch(dataloader, encoder, decoder_cap, decoder_img, criterion, output_l
         meme_captions = data["meme_captions"].squeeze(1)
         max_caption = data["max_caption"]
         total_samples += 1
-        img_captions = data["img_captions"]
         with torch.no_grad():
             encoder_outputs = encoder(images, False)
             caption_outputs, _, attention_weights = decoder_cap(encoder_outputs, meme_captions,
@@ -234,8 +219,6 @@ def val_epoch(dataloader, encoder, decoder_cap, decoder_img, criterion, output_l
             print(f"Datapoint Target: {total_target}")
 
             print(f"Datapoint: {total_samples}, BLEU score: {bleu_score:.4f}")
-
-
             columns = ["Datapoint", "Output"]
             data = [[str(total_samples), total_text]]
             table = wandb.Table(data=data, columns=columns)
@@ -247,31 +230,20 @@ def val_epoch(dataloader, encoder, decoder_cap, decoder_img, criterion, output_l
     return total_loss / len(dataloader), bleu_total/len(dataloader)
 
 
-def train_epoch(dataloader, encoder, decoder_cap, decoder_img, encoder_optimizer,
-                decoder_optimizer_cap, decoder_optimizer_img, criterion, output_lang, logger):
+def train_epoch(dataloader, encoder, decoder_cap, encoder_optimizer, decoder_optimizer_cap , criterion, output_lang):
     total_loss = 0
     batch_loss = 0.0
     total_samples = 0
     for data in dataloader:
-        # print(f"Datapoint {total_samples}")
         images = data["image"]
-        titles = data["title"]
         meme_captions = data["meme_captions"].squeeze(1)
-        img_captions = data["img_captions"]
         max_caption = data["max_caption"]
-        max_img = data["max_img"]
         encoder_outputs = encoder(images)
-        # print(encoder_outputs.shape)
         caption_outputs, _, attention_weights = decoder_cap(encoder_outputs, meme_captions,
                                                             meme_captions, max_caption)
 
-        # scores = caption_outputs.view(-1, caption_outputs.size(-1))
-        # targets = meme_captions[:,:max(max_caption)]
-        # print(max_caption)
         scores = pack_padded_sequence(caption_outputs, max_caption, batch_first=True, enforce_sorted = False)[0]
-        # print(pack_padded_sequence(caption_outputs, max_caption, batch_first=True, enforce_sorted = False)[1])
         targets = pack_padded_sequence(meme_captions, max_caption, batch_first=True, enforce_sorted = False)[0]
-        # print(pack_padded_sequence(meme_captions, max_caption, batch_first=True, enforce_sorted = False)[1])
         loss = criterion(scores, targets)
         loss_attention = 0
 
@@ -338,9 +310,7 @@ def train_epoch(dataloader, encoder, decoder_cap, decoder_img, encoder_optimizer
     return total_loss / len(dataloader)
 
 
-def train(
-        train_dataloader, val_dataloader, encoder, decoder_cap, decoder_img, n_epochs, logger, output_lang,
-        learning_rate=4e-4,
+def train(train_dataloader, val_dataloader, encoder, decoder_cap, n_epochs, logger, output_lang, learning_rate=4e-4,
         print_every=100, plot_every=100):
     plot_losses = []
     print_loss_total = 0  # Reset every print_every
@@ -356,20 +326,17 @@ def train(
 
     encoder_optimizer = optim.Adam(params=filter(lambda p: p.requires_grad, encoder.parameters()), lr=1e-5)
     decoder_optimizer_cap = optim.Adam(params=filter(lambda p: p.requires_grad, decoder_cap.parameters()), lr=learning_rate)
-    decoder_optimizer_img = optim.Adam(decoder_img.parameters(), lr=learning_rate)
-    # criterion = nn.NLLLoss(ignore_index=0)
-    # criterion = nn.NLLLoss(ignore_index=0).to(device)
     criterion = nn.CrossEntropyLoss(ignore_index=0).to(device)
 
 
     for epoch in range(1, n_epochs + 1):
         print(epoch)
-        loss = train_epoch(train_dataloader, encoder.train(), decoder_cap.train(), decoder_img.train(),
-                           encoder_optimizer, decoder_optimizer_cap, decoder_optimizer_img,
+        loss = train_epoch(train_dataloader, encoder.train(), decoder_cap.train(),
+                           encoder_optimizer, decoder_optimizer_cap,
                            criterion,
-                           output_lang, logger)
+                           output_lang)
 
-        val_loss, bleu_loss = val_epoch(val_dataloader, encoder.eval(), decoder_cap.eval(), decoder_img.eval(), criterion,
+        val_loss, bleu_loss = val_epoch(val_dataloader, encoder.eval(), decoder_cap.eval(), criterion,
                              output_lang)
 
         print_loss_total += loss
@@ -431,19 +398,23 @@ def main():
     encoder = EncoderCNN(backbone='efficientnet').to(device)
     decoder_cap = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1).to(
         device)
-    decoder_img = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1).to(
-        device)
 
-    wandb_logger = Logger(f"inm706_coursework_cnn_lstm_resnet_attention_flickr_exp",
-                          project='inm706_cw_hyperion_resnet_attention_flickr_exp', model=decoder_cap)
+    wandb_logger = Logger(f"inm706_coursework_new_attention_encoder",
+                          project='inm706_cw_new_attention_encoder', model=decoder_cap)
     logger = wandb_logger.get_logger()
 
     print(f"Length of vocabulary: {train_dataset.n_words}")
 
-    train(train_dataloader, val_dataloader, encoder, decoder_cap, decoder_img, n_epochs, logger, train_dataset,
+    train(train_dataloader, val_dataloader, encoder, decoder_cap, n_epochs, logger, train_dataset,
           print_every=1,
           plot_every=1)
     return
+
+# TODO:
+# Baseline: Resnet without attention
+# Improvement: Resnet with Bahnadanu attention
+# Evaluate encoder performance: Resnet vs EfficentNet
+# Evaluate: Add self attention to encoder
 
 
 if __name__ == '__main__':

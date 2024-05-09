@@ -450,8 +450,6 @@ def train(
             bleu_plot_loss_total_img = 0
 
 
-
-
 def main():
     n_epochs = 40
 
@@ -466,14 +464,14 @@ def main():
     print(len(train_set))
     val_dataloader = torch.utils.data.DataLoader(val_set, batch_size=8, shuffle=False)
 
-    encoder = EncoderCNN(backbone='resnet').to(device)
+    encoder = EncoderCNN(backbone='efficientnet').to(device)
     decoder_cap = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1).to(
         device)
     decoder_img = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1).to(
         device)
 
-    wandb_logger = Logger(f"inm706_coursework_memes_new",
-                          project='inm706_cw_hyperion_memes_new', model=decoder_img)
+    wandb_logger = Logger(f"inm706_coursework_new_attention_encoder",
+                          project='inm706_cw_new_attention_encoder', model=decoder_cap)
     logger = wandb_logger.get_logger()
 
     train(train_dataloader, val_dataloader, encoder, decoder_cap, decoder_img, n_epochs, logger, train_dataset,

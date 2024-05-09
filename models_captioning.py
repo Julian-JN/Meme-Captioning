@@ -109,7 +109,8 @@ class EncoderCNN(nn.Module):
             num_features = self.model._fc.in_features
             print(num_features)
             self.model._fc = nn.Identity()
-
+            self.attention = SelfAttentionCNN(in_dim=1280)
+            self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
 
         # if backbone == "clip":
         #     # model_name = "openai/clip-vit-base-patch32"
@@ -242,8 +243,11 @@ class EncoderCNN(nn.Module):
         # print("CONCAT PART")
         # whole_image_features = self.features(input)
         whole_image_features = self.model.extract_features(input)
-        whole_image_features = self.adaptive_pool(
-            whole_image_features)  # (batch_size, 2048, encoded_image_size, encoded_image_size)
+        context, weights = self.attention(whole_image_features)
+        # print(context.shape)
+        context = self.avgpool(context)
+        context = context.view(context.size(0), -1)
+        whole_image_features = self.adaptive_pool(whole_image_features)  # (batch_size, 2048, encoded_image_size, encoded_image_size)
         whole_image_features = whole_image_features.permute(0, 2, 3, 1)
         whole_image_features = whole_image_features.contiguous().view(whole_image_features.size(0), -1,  whole_image_features.size(-1))
 
@@ -263,6 +267,26 @@ class EncoderCNN(nn.Module):
         # features = torch.cat([whole_image_features] + object_features, dim=1)
         return whole_image_features
 
+class SelfAttentionCNN(nn.Module):
+    def __init__(self, in_dim):
+        super(SelfAttentionCNN, self).__init__()
+        self.query_conv = nn.Conv2d(in_channels=in_dim, out_channels=in_dim//8, kernel_size=1)
+        self.key_conv = nn.Conv2d(in_channels=in_dim, out_channels=in_dim//8, kernel_size=1)
+        self.value_conv = nn.Conv2d(in_channels=in_dim, out_channels=in_dim, kernel_size=1)
+        self.gamma = nn.Parameter(torch.zeros(1))
+
+    def forward(self, x):
+        batch_size, C, width, height = x.size()
+        query = self.query_conv(x).view(batch_size, -1, width*height).permute(0, 2, 1)
+        key = self.key_conv(x).view(batch_size, -1, width*height)
+        energy = torch.bmm(query, key)
+        attention = F.softmax(energy, dim=-1)
+        value = self.value_conv(x).view(batch_size, -1, width*height)
+        out = torch.bmm(value, attention.permute(0, 2, 1))
+        out = out.view(batch_size, C, width, height)
+        out = self.gamma*out + x
+        return out, attention
+
 
 class BahdanauAttention(nn.Module):
     def __init__(self, hidden_size):
@@ -280,15 +304,9 @@ class BahdanauAttention(nn.Module):
     def forward(self, query, keys):
         if type(query) is tuple:
             query, _ = query
-
-        # print(query.shape)
-        # print(keys.shape)
         hidden = self.W1(query)
         encoder = self.W2(keys)
-        # print(hidden.shape)
-        # print(encoder.shape)
         scores = self.Va(torch.relu(hidden.unsqueeze(1) + encoder)).squeeze(2)
-        # print(scores.shape)
         weights = F.softmax(scores, dim=1)
         context = (keys * weights.unsqueeze(2)).sum(dim=1)
         return context, weights
@@ -311,7 +329,6 @@ class AttentionMultiHead(nn.Module):
             all_heads.append(out)
         z_out_concat = torch.cat(all_heads, dim=2)
         z_out_out = F.relu(self.linear_out(z_out_concat))
-        # print(z_out_out.shape)
         return z_out_out
 
 
@@ -337,7 +354,6 @@ class SelfAttention(nn.Module):
         key_out = F.relu(self.key_linear(input_vector))
 
         value_out = F.relu(self.value_linear(input_vector))
-        # out_q_k = torch.bmm(query_out, key_out.transpose(1, 2))
         out_q_k = torch.div(torch.bmm(query_out, key_out.transpose(1, 2)), math.sqrt(self.dk_size))
         softmax_q_k = self.softmax(out_q_k)
         out_combine = torch.bmm(softmax_q_k, value_out)
@@ -382,21 +398,16 @@ class DecoderLSTM(nn.Module):
         self.out = nn.Linear(hidden_size, output_size)  # 2 for direction and 2 for image/hidden concat
         self.num_layers = num_layers
         self.attention = BahdanauAttention(hidden_size)
-        # self.attention = SelfAttention(hidden_size)
         # self.attention_function = self.forward_step
         self.attention_function = self.forward_step_bahdanau
-        # self.attention_function = self.forward_step_self
         self.init_h = nn.Linear(1280, hidden_size)  # linear layer to find initial hidden state of LSTM
         self.init_c = nn.Linear(1280, hidden_size)  # linear layer to find initial cell state of LSTM
-        # self.bn = nn.BatchNorm1d(hidden_size)
 
         self.s_gate = nn.Linear(hidden_size, 1280)  # linear layer to create a sigmoid-activated gate
         self.sigmoid = nn.Sigmoid()
         ####################################################
         # init weights
         self.apply(self.init_weights)
-        # self.attention_features = AttentionMultiHead(2048, 2048,4)
-
 
         # total_weights = 0
         # for x in self.named_parameters():
@@ -435,16 +446,10 @@ class DecoderLSTM(nn.Module):
         batch_size = caption.size(0)
 
         max_length = max(max_length)
-        # print(max_length)
-        # print(num_captions)
+
         target_embed = self.embedding(caption)
-        # print(target_embed.shape)
         decoder_input_start = torch.empty(batch_size, dtype=torch.long, device=device).fill_(self.SOS_token)
         decoder_input = self.embedding(decoder_input_start)
-        # print(decoder_input.shape)
-
-        # feature_outputs = feature_outputs.repeat(1, num_captions, 1)  # num_layers and 2 for direction
-
         decoder_hidden = feature_outputs
 
         for i in range(max_length):
@@ -458,39 +463,23 @@ class DecoderLSTM(nn.Module):
             attentions.append(attn_weights)
             if target_tensor is not None:
                 probability = random.random()
-                if probability < 0.5:
+                if probability < 0.8:
                     decoder_input = target_embed[:, i,:]  # Teacher forcing
                 else:
-                    # _, topi = decoder_output.topk(1)
-                    # indices = torch.randint(1, (batch_size, 1)).to(device)
-                    # decoder_input = torch.gather(topi, dim=1, index=indices).squeeze(-1).detach()
-                    # decoder_input = self.embedding(decoder_input)
                     _, topi = decoder_output.topk(1)
                     decoder_input = topi.squeeze(-1).detach()
                     decoder_input = self.embedding(decoder_input)
-                    # print(decoder_input.shape)
-
 
             else:  # validation/no teacher forcing
                 _, topi = decoder_output.topk(1)
                 decoder_input = topi.squeeze(-1).detach()
                 decoder_input = self.embedding(decoder_input)
-                # _, topi = decoder_output.topk(1)
-                # indices = torch.randint(1, (batch_size, 1)).to(device)
-                # decoder_input = torch.gather(topi, dim=1, index=indices).squeeze(-1).detach()
-                # decoder_input = self.embedding(decoder_input)
 
-                # decoder_input = topi.squeeze(-1).detach()  # detach from history as input
-                # print(decoder_input.shape)
-        # print(decoder_outputs[0].shape)
         decoder_outputs = torch.cat([tensor.unsqueeze(1) for tensor in decoder_outputs], dim=1)
-        # print(decoder_outputs.shape)
-        # decoder_outputs = F.log_softmax(decoder_outputs, dim=-1)
         if attentions[0] is not None:
             attentions = torch.cat([tensor.unsqueeze(1) for tensor in attentions], dim=1)
         else:
             attentions = None
-        # print(attentions.shape)
         return decoder_outputs, decoder_hidden, attentions  # We return `None` for consistency in the training loop
 
     def forward_step(self, input, hidden, image, image_feature):
@@ -500,15 +489,6 @@ class DecoderLSTM(nn.Module):
         if image_feature:
             hidden = self.init_h(mean_encoder_out)  # (batch_size, decoder_dim)
             cell = self.init_c(mean_encoder_out)
-            # cell = torch.zeros_like(hidden)
-            # hidden = torch.zeros_like(hidden)
-
-        # print("Forward")
-        # print(context.shape)
-        # print(input.shape)
-        # print(mean_encoder_out.shape)
-        # print(context.shape)
-        # print(input_lstm.shape)
         hidden, cell = self.LSTM(input, (hidden, cell))
         output = self.out(self.dropout(hidden))
         return output, (hidden, cell), output
@@ -520,53 +500,11 @@ class DecoderLSTM(nn.Module):
         if image_feature:
             hidden = self.init_h(mean_encoder_out)  # (batch_size, decoder_dim)
             cell = self.init_c(mean_encoder_out)
-            # cell = torch.zeros_like(hidden)
-            # hidden = torch.zeros_like(hidden)
 
         context, attn_weights = self.attention(hidden, image)
-        # print("Forward")
-        # print(context.shape)
-        # print(input.shape)
-        # print(mean_encoder_out.shape)
         gate = self.sigmoid(self.s_gate(hidden))
         context = context * gate
-        # print(context.shape)
         input_lstm = torch.cat((input, context), dim=1)
-        # print(input_lstm.shape)
         hidden, cell = self.LSTM(input_lstm, (hidden, cell))
         output = self.out(self.dropout(hidden))
         return output, (hidden,cell), attn_weights
-
-    def forward_step_self(self, input, hidden, image, image_feature, mode):
-        input = self.dropout(self.embedding(input))
-        input = F.relu(input)
-
-        mean_encoder_out = image.mean(dim=1).unsqueeze(1)
-        mean_encoder_out = mean_encoder_out.repeat(self.num_layers, 1, 1)  # num_layers and 2 for direction
-        if type(hidden) is tuple:
-            hidden, cell = hidden
-        if image_feature:
-            hidden = self.init_h(mean_encoder_out)  # (batch_size, decoder_dim)
-            cell = self.init_c(mean_encoder_out)
-        if image_feature:
-            output, hidden = self.LSTM(input, (hidden, hidden))
-        else:
-            output, hidden = self.LSTM(input, hidden)
-            # print("Hidden shape")
-            # print(hidden[0].shape)
-        # print(output.shape)
-        context = self.attention(output)
-        # print(context.shape)
-        # print(output.shape)
-
-        # Concatenate decoder hidden state and context vector
-        combined = torch.cat((output, context), dim=2)
-        # print(combined.shape)
-        # print(combined.shape)
-        if mode == "img":
-            # print("Image")
-            output = self.out_img(combined)
-        else:
-            output = self.out(combined)
-
-        return output, hidden, context

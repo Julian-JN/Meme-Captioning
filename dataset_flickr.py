@@ -36,8 +36,6 @@ class FlickrDataset(Dataset):
             transform (callable, optional): Optional data transformations (e.g., resizing, normalization).
         """
         # self.mean, self.std = self.calculate_mean_std()
-        # print(self.mean)
-        # print(self.std)
         # self.transform = transforms.Compose([transforms.Resize((300, 300)),  # Example: Resize to 224x224
         #                                      transforms.ToTensor(),
         #                                      transforms.Normalize([0.5471, 0.5182, 0.49696], [0.2940, 0.2934, 0.2992])])
@@ -53,9 +51,6 @@ class FlickrDataset(Dataset):
         self.captions = self.data["caption"]
         print("There are {} image to captions".format(len(self.data)))
         print(self.data.head())
-        # print(self.meme_name)
-        # print(len(self.meme_name))
-        # print(len(self.titles_voc))
 
         self.max_seq_len = 80
 
@@ -122,19 +117,15 @@ class FlickrDataset(Dataset):
 
 
     def create_vocab(self):
-        # titles = [item['title'] for item in self.data_voc]
         meme_captions = self.data["caption"].tolist()
         all_words = meme_captions
-        # print(all_words)
 
         # Normalize each word, and add to vocab
         vocab = self.word2index
         for sentence in all_words:
             normalized_sentence = self.normalize_string(sentence)
-            # print(normalized_sentence)
             for word in normalized_sentence.split(' '):
                 self.addWord(word)
-        # print(vocab)
         return vocab
 
     def load_vocab(self):
@@ -146,10 +137,7 @@ class FlickrDataset(Dataset):
         return
 
     def unicode_to_ascii(self, s):
-        return ''.join(
-            c for c in unicodedata.normalize('NFD', s)
-            if unicodedata.category(c) != 'Mn'
-        )
+        return ''.join(c for c in unicodedata.normalize('NFD', s) if unicodedata.category(c) != 'Mn')
 
     def normalize_string(self, s):
         s = self.unicode_to_ascii(s.lower().strip())
@@ -165,10 +153,8 @@ class FlickrDataset(Dataset):
             tokenized_text = [self.voc[word] if word in self.voc else 3 for word in normalized_text.split(' ')]
             tokenized_text.append(self.EOS_token)
             max_length.append(len(tokenized_text))
-        seq_length = max(max_length)
 
         for text in sentence:
-            # print(text)
             normalized_text = self.normalize_string(text)
             tokenized_text = [self.voc[word] if word in self.voc else 3 for word in normalized_text.split(' ')]
             tokenized_text.append(self.EOS_token)
