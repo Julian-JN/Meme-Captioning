@@ -10,9 +10,9 @@ if torch.cuda.is_available():
     device = torch.device('cuda')
 
 
-def save_checkpoint(epoch, model, model_name, optimizer):
-    ckpt = {'epoch': epoch, 'model_weights': model.state_dict(), 'optimizer_state': optimizer.state_dict()}
-    torch.save(ckpt, f"train_checkpoint/{model_name}_ckpt_{str(epoch)}.pth")
+def save_checkpoint(model, model_name):
+    ckpt = {'model_weights': model.state_dict()}
+    torch.save(ckpt, f"train_checkpoint/{model_name}_ckpt.pth")
 
 
 def load_checkpoint(model, file_name):

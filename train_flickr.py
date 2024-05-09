@@ -24,6 +24,7 @@ from torch.utils.data import Dataset, DataLoader
 from torch.utils.data import random_split
 from torch.nn.functional import cosine_similarity
 from torch.nn.utils.rnn import pack_padded_sequence
+
 # from gensim.models import Word2Vec
 
 
@@ -60,11 +61,11 @@ def visualize_att(image, seq, alphas, smooth=False, mode="cap"):
         fig = plt.figure()
         plt.text(0, 1, '%s' % (words[t]), color='black', backgroundcolor='white', fontsize=12)
         plt.imshow(image)
-        current_alpha = alphas[0,t, :]
+        current_alpha = alphas[0, t, :]
         if current_alpha.size(0) == 196:
             current_alpha = current_alpha.view(-1, 14, 14).squeeze(0)
         else:
-            current_alpha = current_alpha.view(-1, 14, 14).squeeze(0).mean(0) # mean if object detection included
+            current_alpha = current_alpha.view(-1, 14, 14).squeeze(0).mean(0)  # mean if object detection included
 
         if smooth:
             alpha = skimage.transform.pyramid_expand(current_alpha.cpu().numpy(), upscale=24, sigma=8)
@@ -81,9 +82,8 @@ def visualize_att(image, seq, alphas, smooth=False, mode="cap"):
         plt.close(fig)
 
 
-def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", length = 80):
+def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", length=80):
     with torch.no_grad():
-        # print(length)
         if mode == "train":
             max_cap = length
             target_cap = caption
@@ -93,7 +93,7 @@ def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", lengt
             target_cap = None
             plot_feature = False
 
-        encoder_outputs = encoder(input_tensor, plot_feature)
+        encoder_outputs, _ = encoder(input_tensor, plot_feature)
         caption_output, _, attention_weights = decoder_cap(encoder_outputs, caption,
                                                            target_tensor=target_cap, max_caption=max_cap)
         caption_output = F.log_softmax(caption_output, dim=-1)
@@ -102,35 +102,13 @@ def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", lengt
 
 
 def calculate_bleu(target, predicted):
-
     references = [[caption] for caption in target]
     hypotheses = [caption for caption in predicted]
     # Calculate BLEU score
-    bleu_score = nltk.translate.bleu_score.corpus_bleu(references, hypotheses,weights=(0.25, 0.25, 0.25, 0.25),
+    bleu_score = nltk.translate.bleu_score.corpus_bleu(references, hypotheses, weights=(0.25, 0.25, 0.25, 0.25),
                                                        smoothing_function=nltk.translate.bleu_score.SmoothingFunction().method1)
     return bleu_score
 
-# def calculate_cosine(target_captions, predicted_captions):
-#     model = Word2Vec.load("path/to/word2vec_model")
-#     predicted_vecs = []
-#     for caption in predicted_captions:
-#         vec = [model.wv[word] for word in caption.split() if word in model.wv]
-#         predicted_vecs.append(vec)
-#
-#     target_vecs = []
-#     for caption in target_captions:
-#         vec = [model.wv[word] for word in caption.split() if word in model.wv]
-#         target_vecs.append(vec)
-#
-#     # Calculate cosine similarity pairwise between predicted and target vectors
-#     cosine_similarity = []
-#     for i in range(len(predicted_captions)):
-#         for j in range(len(target_captions)):
-#             similarity = model.wv.cosine_similarities(predicted_vecs[i], target_vecs[j])[0]
-#             cosine_similarity.append(similarity)
-#             # print(
-#             #     f"Similarity between predicted '{predicted_captions[i]}' and target '{target_captions[j]}': {similarity:.4f}"
-#     return sum(cosine_similarity)/len(cosine_similarity)
 
 def token2text(output, voc):
     EOS_token = 2
@@ -150,7 +128,8 @@ def token2text(output, voc):
         decoded_words_total.append(decoded_words)
     return decoded_words_total
 
-def target2text(target, voc): # for BLEU EVALUATION
+
+def target2text(target, voc):  # for BLEU EVALUATION
     EOS_token = 2
     decoded_words_total = []
     limit = target.size(0)
@@ -177,10 +156,8 @@ def val_epoch(dataloader, encoder, decoder_cap, criterion, output_lang):
         max_caption = data["max_caption"]
         total_samples += 1
         with torch.no_grad():
-            encoder_outputs = encoder(images, False)
-            caption_outputs, _, attention_weights = decoder_cap(encoder_outputs, meme_captions,
-                                                                None, max_caption)
-
+            encoder_outputs, _ = encoder(images, False)
+            caption_outputs, _, attention_weights = decoder_cap(encoder_outputs, meme_captions, None, max_caption)
 
         scores = pack_padded_sequence(caption_outputs, max_caption, batch_first=True, enforce_sorted=False)[0]
         targets = pack_padded_sequence(meme_captions, max_caption, batch_first=True, enforce_sorted=False)[0]
@@ -194,13 +171,12 @@ def val_epoch(dataloader, encoder, decoder_cap, criterion, output_lang):
         loss_attention = 0
         # loss_attention = 1.0 * ((1. - attention_weights.sum(dim=1)) ** 2).mean()
 
-        l2_norm = sum(torch.norm(p, 2) ** 2 for p in decoder_cap.parameters())
         loss_mix = loss + loss_attention
         bleu_loss = bleu_score
 
         if total_samples % 100 == 0:
-            captions, attention_weights = evaluate(encoder, decoder_cap, images,meme_captions,
-                                                                                       output_lang, mode="val",length = max_caption)
+            captions, attention_weights = evaluate(encoder, decoder_cap, images, meme_captions, output_lang, mode="val",
+                                                   length=max_caption)
             total_text = ""
             for caption in captions:
                 converted_list = map(str, caption)
@@ -227,27 +203,24 @@ def val_epoch(dataloader, encoder, decoder_cap, criterion, output_lang):
         total_loss += loss_mix.item()
         bleu_total += bleu_loss
 
-    return total_loss / len(dataloader), bleu_total/len(dataloader)
+    return total_loss / len(dataloader), bleu_total / len(dataloader)
 
 
-def train_epoch(dataloader, encoder, decoder_cap, encoder_optimizer, decoder_optimizer_cap , criterion, output_lang):
+def train_epoch(dataloader, encoder, decoder_cap, encoder_optimizer, decoder_optimizer_cap, criterion, output_lang):
     total_loss = 0
-    batch_loss = 0.0
     total_samples = 0
     for data in dataloader:
         images = data["image"]
         meme_captions = data["meme_captions"].squeeze(1)
         max_caption = data["max_caption"]
-        encoder_outputs = encoder(images)
+        encoder_outputs,_ = encoder(images)
         caption_outputs, _, attention_weights = decoder_cap(encoder_outputs, meme_captions,
                                                             meme_captions, max_caption)
 
-        scores = pack_padded_sequence(caption_outputs, max_caption, batch_first=True, enforce_sorted = False)[0]
-        targets = pack_padded_sequence(meme_captions, max_caption, batch_first=True, enforce_sorted = False)[0]
+        scores = pack_padded_sequence(caption_outputs, max_caption, batch_first=True, enforce_sorted=False)[0]
+        targets = pack_padded_sequence(meme_captions, max_caption, batch_first=True, enforce_sorted=False)[0]
         loss = criterion(scores, targets)
         loss_attention = 0
-
-        l2_norm = sum(torch.norm(p, 2) ** 2 for p in decoder_cap.parameters())
 
         # loss_mix = loss + 0.8*loss_img + 0.0001*l2_norm
 
@@ -274,47 +247,18 @@ def train_epoch(dataloader, encoder, decoder_cap, encoder_optimizer, decoder_opt
         encoder_optimizer.step()
 
         total_loss += loss_mix.item()
-        batch_loss += loss_mix.item()
-
         total_samples += 1
-        if total_samples % 500 == 0:
-            total_text = ""
-            captions, attention_weights = evaluate(encoder, decoder_cap, images,meme_captions,output_lang, mode="train", length = max_caption)
-
-            visualize_att(images, captions, attention_weights, mode="cap")
-
-            for caption in captions:
-                converted_list = map(str, caption)
-                result = ' '.join(converted_list)
-                result += "/"
-                total_text += result
-            print(f"Datapoint Attention: {total_samples}, Text: {total_text}")
-
-            total_target = ""
-            targets_dec = target2text(meme_captions, output_lang)
-            for caption in targets_dec:
-                converted_list = map(str, caption)
-                result = ' '.join(converted_list)
-                result += "/"
-                total_target += result
-            print(f"Datapoint Attention Target: {total_target}")
-
-            bleu_score = calculate_bleu(targets_dec, captions)
-            print(f"Datapoint Attention: {total_samples}, BLEU score: {bleu_score:.4f}")
-
-            columns = ["Datapoint", "Output"]
-            data = [[str(total_samples), total_text]]
-            table = wandb.Table(data=data, columns=columns)
-            wandb.log({"Train example Caption": table})
 
     return total_loss / len(dataloader)
 
 
 def train(train_dataloader, val_dataloader, encoder, decoder_cap, n_epochs, logger, output_lang, learning_rate=4e-4,
-        print_every=100, plot_every=100):
+          print_every=100, plot_every=100):
     plot_losses = []
     print_loss_total = 0  # Reset every print_every
     plot_loss_total = 0  # Reset every plot_every
+
+    best_score = float('inf')
 
     val_plot_losses = []
     val_print_loss_total = 0  # Reset every print_every
@@ -325,9 +269,9 @@ def train(train_dataloader, val_dataloader, encoder, decoder_cap, n_epochs, logg
     bleu_plot_loss_total = 0  # Reset every plot_every
 
     encoder_optimizer = optim.Adam(params=filter(lambda p: p.requires_grad, encoder.parameters()), lr=1e-5)
-    decoder_optimizer_cap = optim.Adam(params=filter(lambda p: p.requires_grad, decoder_cap.parameters()), lr=learning_rate)
+    decoder_optimizer_cap = optim.Adam(params=filter(lambda p: p.requires_grad, decoder_cap.parameters()),
+                                       lr=learning_rate)
     criterion = nn.CrossEntropyLoss(ignore_index=0).to(device)
-
 
     for epoch in range(1, n_epochs + 1):
         print(epoch)
@@ -337,7 +281,7 @@ def train(train_dataloader, val_dataloader, encoder, decoder_cap, n_epochs, logg
                            output_lang)
 
         val_loss, bleu_loss = val_epoch(val_dataloader, encoder.eval(), decoder_cap.eval(), criterion,
-                             output_lang)
+                                        output_lang)
 
         print_loss_total += loss
         plot_loss_total += loss
@@ -348,10 +292,12 @@ def train(train_dataloader, val_dataloader, encoder, decoder_cap, n_epochs, logg
         bleu_print_loss_total += bleu_loss
         bleu_plot_loss_total += bleu_loss
 
+        if val_loss < best_score:
+            save_checkpoint(decoder_cap, "LSTM_Captions_decoder_Cap")
+            save_checkpoint(encoder, "LSTM_Captions_encoder")
+            best_score = val_loss
+
         if epoch % print_every == 0:
-            if epoch % 5 == 0:
-                save_checkpoint(epoch, decoder_cap, "LSTM_Captions_decoder_Cap", decoder_optimizer_cap)
-                save_checkpoint(epoch, encoder, "LSTM_Captions_encoder", encoder_optimizer)
             print_loss_avg = print_loss_total / print_every
             print_loss_total = 0
             print(f"Train Epoch: {epoch}/{n_epochs}, Loss {print_loss_avg}")
@@ -396,11 +342,11 @@ def main():
     val_dataloader = torch.utils.data.DataLoader(val_set, batch_size=16, shuffle=False)
 
     encoder = EncoderCNN(backbone='efficientnet').to(device)
-    decoder_cap = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1).to(
+    decoder_cap = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1, attention=True).to(
         device)
 
-    wandb_logger = Logger(f"inm706_coursework_new_attention_encoder",
-                          project='inm706_cw_new_attention_encoder', model=decoder_cap)
+    wandb_logger = Logger(f"tests",
+                          project='INM706-EXPERIMENTS', model=decoder_cap)
     logger = wandb_logger.get_logger()
 
     print(f"Length of vocabulary: {train_dataset.n_words}")
@@ -409,6 +355,7 @@ def main():
           print_every=1,
           plot_every=1)
     return
+
 
 # TODO:
 # Baseline: Resnet without attention

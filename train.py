@@ -24,6 +24,7 @@ from torch.utils.data import Dataset, DataLoader
 from torch.utils.data import random_split
 from torch.nn.functional import cosine_similarity
 from torch.nn.utils.rnn import pack_padded_sequence
+
 torch.manual_seed(0)
 
 # os.environ['https_proxy'] = "http://hpc-proxy00.city.ac.uk:3128"  # Proxy to train with hyperion
@@ -61,7 +62,7 @@ def visualize_att(image, seq, alphas, smooth=False, mode="cap"):
         fig = plt.figure()
         plt.text(0, 1, '%s' % (words[t]), color='black', backgroundcolor='white', fontsize=12)
         plt.imshow(image)
-        current_alpha = alphas[0,t, :]
+        current_alpha = alphas[0, t, :]
         current_alpha = current_alpha.view(-1, 14, 14).squeeze(0)
         # alpha = np.reshape(current_alpha, (224, 224))  # Resize to image dimensions
         # alpha /= np.max(alpha)
@@ -81,7 +82,7 @@ def visualize_att(image, seq, alphas, smooth=False, mode="cap"):
         plt.close(fig)
 
 
-def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", length = 80):
+def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", length=80):
     with torch.no_grad():
         # print(length)
         if mode == "train":
@@ -93,32 +94,29 @@ def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", lengt
             target_cap = None
             plot_feature = False
 
-        encoder_outputs = encoder(input_tensor, plot_feature)
+        encoder_outputs,_ = encoder(input_tensor, plot_feature)
         caption_output, _, attention_weights = decoder_cap(encoder_outputs, caption,
                                                            target_tensor=target_cap, max_caption=max_cap)
         caption_output = F.log_softmax(caption_output, dim=-1)
         decoded_caption = token2text(caption_output, voc)
     return decoded_caption, attention_weights
 
-def calculate_bleu(target, predicted):
 
+def calculate_bleu(target, predicted):
     references = [[caption] for caption in target]
     hypotheses = [caption for caption in predicted]
     # Calculate BLEU score
-    bleu_score = nltk.translate.bleu_score.corpus_bleu(references, hypotheses,weights=(0.25, 0.25, 0.25, 0.25),
+    bleu_score = nltk.translate.bleu_score.corpus_bleu(references, hypotheses, weights=(0.25, 0.25, 0.25, 0.25),
                                                        smoothing_function=nltk.translate.bleu_score.SmoothingFunction().method1)
     return bleu_score
 
+
 def token2text(output, voc):
     EOS_token = 2
-    UNK = 3
     _, topi = output.topk(1)
     decoded_ids = topi.squeeze(-1)
-    # print(decoded_ids)
-    # print(decoded_ids.shape)
     decoded_words_total = []
     limit = decoded_ids.size(0)
-    # print(limit)
     for i in range(limit):
         decoded_words = []
         caption = decoded_ids[i]
@@ -131,12 +129,11 @@ def token2text(output, voc):
         decoded_words_total.append(decoded_words)
     return decoded_words_total
 
-def target2text(target, voc): # for BLEU EVALUATION
+
+def target2text(target, voc):  # for BLEU EVALUATION
     EOS_token = 2
-    UNK = 3
     decoded_words_total = []
     limit = target.size(0)
-    # print(limit)
     for i in range(limit):
         decoded_words = []
         caption = target[i]
@@ -158,14 +155,13 @@ def val_epoch(dataloader, encoder, decoder_cap, decoder_img, criterion, output_l
 
     for data in dataloader:
         images = data["image"]
-        titles = data["title"]
         meme_captions = data["meme_captions"].squeeze(1)
         img_captions = data["img_captions"].squeeze(1)
         max_caption = data["max_caption"]
         max_img = data["max_img"]
         total_samples += 1
         with torch.no_grad():
-            encoder_outputs = encoder(images, False)
+            encoder_outputs, _ = encoder(images, False)
             caption_outputs, _, attention_weights = decoder_cap(encoder_outputs, meme_captions,
                                                                 None, max_caption)
             img_outputs, _, attention_weights_img = decoder_img(encoder_outputs, img_captions,
@@ -179,7 +175,6 @@ def val_epoch(dataloader, encoder, decoder_cap, decoder_img, criterion, output_l
         references = token2text(references, output_lang)
         bleu_score = calculate_bleu(hypothesis, references)
         bleu_loss = bleu_score
-
 
         scores = pack_padded_sequence(img_outputs, max_img, batch_first=True, enforce_sorted=False)[0]
         targets = pack_padded_sequence(img_captions, max_img, batch_first=True, enforce_sorted=False)[0]
@@ -198,9 +193,9 @@ def val_epoch(dataloader, encoder, decoder_cap, decoder_img, criterion, output_l
 
         if total_samples % 50 == 0:
             captions, attention_weights = evaluate(encoder, decoder_cap, images, meme_captions,
-                                                          output_lang, mode="val", length=max_caption)
+                                                   output_lang, mode="val", length=max_caption)
             img_caption, attention_weights_img = evaluate(encoder, decoder_img, images, img_captions,
-                                                                                       output_lang, mode="val", length = max_img)
+                                                          output_lang, mode="val", length=max_img)
             total_text = ""
             for caption in captions:
                 converted_list = map(str, caption)
@@ -231,24 +226,21 @@ def val_epoch(dataloader, encoder, decoder_cap, decoder_img, criterion, output_l
         bleu_total += bleu_loss
         bleu_total_img += bleu_loss_img
 
-    return total_loss / len(dataloader), bleu_total/len(dataloader), bleu_total_img/len(dataloader)
+    return total_loss / len(dataloader), bleu_total / len(dataloader), bleu_total_img / len(dataloader)
 
 
 def train_epoch(dataloader, encoder, decoder_cap, decoder_img, encoder_optimizer,
-                decoder_optimizer_cap, decoder_optimizer_img, criterion, output_lang, logger):
+                decoder_optimizer_cap, decoder_optimizer_img, criterion, output_lang):
     total_loss = 0
-    batch_loss = 0.0
     total_samples = 0
     for data in dataloader:
         images = data["image"]
-        titles = data["title"]
         meme_captions = data["meme_captions"].squeeze(1)
         img_captions = data["img_captions"].squeeze(1)
         max_caption = data["max_caption"]
         max_img = data["max_img"]
 
-
-        encoder_outputs = encoder(images)
+        encoder_outputs,_ = encoder(images)
         caption_outputs, _, attention_weights = decoder_cap(encoder_outputs, meme_captions,
                                                             meme_captions, max_caption)
         img_outputs, _, attention_weights_img = decoder_img(encoder_outputs, img_captions,
@@ -262,9 +254,6 @@ def train_epoch(dataloader, encoder, decoder_cap, decoder_img, encoder_optimizer
         loss_img = criterion(scores, targets)
 
         loss_attention = 0
-
-        l2_norm = sum(torch.norm(p, 2) ** 2 for p in decoder_cap.parameters())
-        l2_norm_2 = sum(torch.norm(p, 2) ** 2 for p in decoder_img.parameters())
 
         loss_cap = loss
         loss_cap_img = loss_img
@@ -296,64 +285,7 @@ def train_epoch(dataloader, encoder, decoder_cap, decoder_img, encoder_optimizer
         encoder_optimizer.step()
 
         total_loss += loss_mix.item()
-        batch_loss += loss_mix.item()
-
         total_samples += 1
-        if total_samples % 500 == 0:
-            total_text = ""
-            captions, attention_weights = evaluate(encoder, decoder_cap, images, meme_captions,
-                                                   output_lang, mode="train", length=max_caption)
-            img_caption, attention_weights_img = evaluate(encoder, decoder_img, images, img_captions,
-                                                          output_lang, mode="train", length=max_img)
-            visualize_att(images, captions, attention_weights, mode="cap")
-            visualize_att(images, img_caption, attention_weights_img, mode="img")
-
-            for caption in captions:
-                converted_list = map(str, caption)
-                result = ' '.join(converted_list)
-                result += "/"
-                total_text += result
-            print(f"Datapoint: {total_samples}, Text: {total_text}, max_length: {max_caption}")
-
-            columns = ["Datapoint", "Output"]
-            data = [[str(total_samples), total_text]]
-            table = wandb.Table(data=data, columns=columns)
-            wandb.log({"Train example Caption": table})
-
-            total_text = ""
-            for caption in img_caption:
-                converted_list = map(str, caption)
-                result = ' '.join(converted_list)
-                result += "/"
-                total_text += result
-            print(f"DataPoint IMG: {total_samples}, Text: {total_text},  max_length: {max_img}")
-
-            total_target = ""
-            targets_dec = target2text(meme_captions, output_lang)
-            for caption in targets_dec:
-                converted_list = map(str, caption)
-                result = ' '.join(converted_list)
-                result += "/"
-                total_target += result
-            print(f"Datapoint Attention Target: {total_target}")
-            bleu_score = calculate_bleu(targets_dec, captions)
-            print(f"Datapoint Attention: {total_samples}, BLEU score: {bleu_score:.4f}")
-
-            total_target = ""
-            targets_dec = target2text(img_captions, output_lang)
-            for caption in targets_dec:
-                converted_list = map(str, caption)
-                result = ' '.join(converted_list)
-                result += "/"
-                total_target += result
-            print(f"Datapoint Attention Target: {total_target}")
-            bleu_score = calculate_bleu(targets_dec, img_caption)
-            print(f"Datapoint Attention: {total_samples}, BLEU score IMG: {bleu_score:.4f}")
-
-            columns = ["Datapoint", "Output"]
-            data = [[str(total_samples), total_text]]
-            table = wandb.Table(data=data, columns=columns)
-            wandb.log({"Train example Img": table})
 
     return total_loss / len(dataloader)
 
@@ -362,6 +294,9 @@ def train(
         train_dataloader, val_dataloader, encoder, decoder_cap, decoder_img, n_epochs, logger, output_lang,
         learning_rate=4e-4,
         print_every=100, plot_every=100):
+
+    best_score = float('inf')
+
     plot_losses = []
     print_loss_total = 0  # Reset every print_every
     plot_loss_total = 0  # Reset every plot_every
@@ -378,23 +313,25 @@ def train(
     bleu_print_loss_total_img = 0  # Reset every print_every
     bleu_plot_loss_total_img = 0  # Reset every plot_every
 
-    encoder_optimizer = optim.Adam(params=filter(lambda p: p.requires_grad, encoder.parameters()), lr=1e-5)
-    decoder_optimizer_cap = optim.Adam(params=filter(lambda p: p.requires_grad, decoder_cap.parameters()), lr=learning_rate)
-    decoder_optimizer_img = optim.Adam(params=filter(lambda p: p.requires_grad, decoder_img.parameters()), lr=learning_rate)
+    encoder_optimizer = optim.Adam(params=encoder.parameters(), lr=1e-5)
+    decoder_optimizer_cap = optim.Adam(params= decoder_cap.parameters(),
+                                       lr=learning_rate)
+    decoder_optimizer_img = optim.Adam(params=decoder_img.parameters(),
+                                       lr=learning_rate)
     # criterion = nn.NLLLoss(ignore_index=0)
     # criterion = nn.NLLLoss(ignore_index=0).to(device)
     criterion = nn.CrossEntropyLoss(ignore_index=0).to(device)
-
 
     for epoch in range(1, n_epochs + 1):
         print(epoch)
         loss = train_epoch(train_dataloader, encoder.train(), decoder_cap.train(), decoder_img.train(),
                            encoder_optimizer, decoder_optimizer_cap, decoder_optimizer_img,
                            criterion,
-                           output_lang, logger)
+                           output_lang)
 
-        val_loss, bleu_loss, bleu_loss_img = val_epoch(val_dataloader, encoder.eval(), decoder_cap.eval(), decoder_img.eval(), criterion,
-                             output_lang)
+        val_loss, bleu_loss, bleu_loss_img = val_epoch(val_dataloader, encoder.eval(), decoder_cap.eval(),
+                                                       decoder_img.eval(), criterion,
+                                                       output_lang)
 
         print_loss_total += loss
         plot_loss_total += loss
@@ -408,10 +345,13 @@ def train(
         bleu_print_loss_total_img += bleu_loss_img
         bleu_plot_loss_total_img += bleu_loss_img
 
+        # Save best validation model
+        if val_loss < best_score:
+            save_checkpoint(decoder_cap, "LSTM_Captions_decoder_Cap")
+            save_checkpoint(encoder, "LSTM_Captions_encoder")
+            best_score = val_loss
+
         if epoch % print_every == 0:
-            if epoch % 5 == 0:
-                save_checkpoint(epoch, decoder_cap, "LSTM_Captions_decoder_Cap", decoder_optimizer_cap)
-                save_checkpoint(epoch, encoder, "LSTM_Captions_encoder", encoder_optimizer)
             print_loss_avg = print_loss_total / print_every
             print_loss_total = 0
             print(f"Train Epoch: {epoch}/{n_epochs}, Loss {print_loss_avg}")
@@ -465,9 +405,9 @@ def main():
     val_dataloader = torch.utils.data.DataLoader(val_set, batch_size=8, shuffle=False)
 
     encoder = EncoderCNN(backbone='efficientnet').to(device)
-    decoder_cap = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1).to(
+    decoder_cap = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1, attention=True).to(
         device)
-    decoder_img = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1).to(
+    decoder_img = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1, attention=True).to(
         device)
 
     wandb_logger = Logger(f"inm706_coursework_new_attention_encoder",

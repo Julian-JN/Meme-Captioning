@@ -43,17 +43,13 @@ class MemeDatasetFromFile(Dataset):
         #                                      transforms.ToTensor(),
         #                                      transforms.Normalize([0.5471, 0.5182, 0.49696], [0.2940, 0.2934, 0.2992])])
         self.transform = transforms.Compose([transforms.Resize((256, 256)),  # Example: Resize to 224x224
-                                             transforms.ToTensor(),
-                                             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+                                             transforms.ToTensor()
                                              ])
         # transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         self.data = self.load_data_from_json(self.json_file)
         self.data_voc = self.load_data_from_json(self.json_voc)
         self.meme_name = [item['img_fname'] for item in self.data]
         self.titles_voc = [item['title'] for item in self.data_voc]
-        # print(self.meme_name)
-        # print(len(self.meme_name))
-        # print(len(self.titles_voc))
 
         self.max_seq_len = 80
 
@@ -65,7 +61,6 @@ class MemeDatasetFromFile(Dataset):
 
         if voc_init:
             self.voc = self.create_vocab()
-            # print(len(self.voc))
             f = open("vocab.txt", "w")
             f.write(str(self.voc))
             f.close()
@@ -119,23 +114,18 @@ class MemeDatasetFromFile(Dataset):
 
 
     def create_vocab(self):
-        # titles = [item['title'] for item in self.data_voc]
         meme_captions = [item['meme_captions'] for item in self.data_voc]
         meme_captions = [x for xs in meme_captions for x in xs]
         img_captions = [item['img_captions'] for item in self.data_voc]
         img_captions = [x for xs in img_captions for x in xs]
-        # print(titles)
         all_words = list(itertools.chain(meme_captions, img_captions))
-        # print(all_words)
 
         # Normalize each word, and add to vocab
         vocab = self.word2index
         for sentence in all_words:
             normalized_sentence = self.normalize_string(sentence)
-            # print(normalized_sentence)
             for word in normalized_sentence.split(' '):
                 self.addWord(word)
-        # print(vocab)
         return vocab
 
     def load_vocab(self):
@@ -147,10 +137,7 @@ class MemeDatasetFromFile(Dataset):
         return
 
     def unicode_to_ascii(self, s):
-        return ''.join(
-            c for c in unicodedata.normalize('NFD', s)
-            if unicodedata.category(c) != 'Mn'
-        )
+        return ''.join(c for c in unicodedata.normalize('NFD', s)if unicodedata.category(c) != 'Mn')
 
     def normalize_string(self, s):
         s = self.unicode_to_ascii(s.lower().strip())
@@ -159,22 +146,14 @@ class MemeDatasetFromFile(Dataset):
         return s.strip()
 
     def tokenize_sentence(self, sentence):
-        # print(sentence)
-        # print(len(sentence))
         tokenized_sentence = []
         max_length = []
+
         for text in sentence:
             normalized_text = self.normalize_string(text)
             tokenized_text = [self.voc[word] if word in self.voc else 3 for word in normalized_text.split(' ')]
             tokenized_text.append(self.EOS_token)
             max_length.append(len(tokenized_text))
-        seq_length = max(max_length)
-
-        for text in sentence:
-            # print(text)
-            normalized_text = self.normalize_string(text)
-            tokenized_text = [self.voc[word] if word in self.voc else 3 for word in normalized_text.split(' ')]
-            tokenized_text.append(self.EOS_token)
             max_size = np.zeros(80, dtype=np.int32)
             max_size[:len(tokenized_text)] = tokenized_text
             tokenized_sentence.append(max_size)
@@ -197,10 +176,6 @@ class MemeDatasetFromFile(Dataset):
 
         image_path = "img_meme/memes/"
         image = Image.open(os.path.join(image_path, self.meme_name[idx])).convert('RGB')
-        # plt.imshow(image)
-        # plt.axis("off")  # Hide axes
-        # plt.show()
-        # title, max_title = self.tokenize_sentence([meme_info["title"]])
         meme_captions, max_caption = self.tokenize_sentence(meme_info["meme_captions"])
         img_captions, max_img = self.tokenize_sentence(meme_info["img_captions"])
 
@@ -212,7 +187,6 @@ class MemeDatasetFromFile(Dataset):
             "title": torch.tensor(np.array(meme_captions), dtype=torch.long, device=device),
             "meme_captions": torch.tensor(np.array(meme_captions), dtype=torch.long, device=device),
             "img_captions": torch.tensor(np.array(img_captions), dtype=torch.long, device=device),
-            "valid": True,
             "max_caption":max_caption,
             "max_img":max_img
         }

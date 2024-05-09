@@ -41,8 +41,6 @@ class FlickrDataset(Dataset):
         #                                      transforms.Normalize([0.5471, 0.5182, 0.49696], [0.2940, 0.2934, 0.2992])])
         self.transform = transforms.Compose([transforms.Resize((256, 256)),  # Example: Resize to 224x224
                                              transforms.ToTensor(),
-                                             transforms.Normalize([0.4580, 0.4460, 0.4039]
-                                            ,[0.2421, 0.2332, 0.2371]),
                                              transforms.RandomHorizontalFlip()])
         # transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         caption_file = 'flickr' + '/captions.txt'
@@ -148,16 +146,12 @@ class FlickrDataset(Dataset):
     def tokenize_sentence(self, sentence):
         tokenized_sentence = []
         max_length = []
-        for text in sentence:
-            normalized_text = self.normalize_string(text)
-            tokenized_text = [self.voc[word] if word in self.voc else 3 for word in normalized_text.split(' ')]
-            tokenized_text.append(self.EOS_token)
-            max_length.append(len(tokenized_text))
 
         for text in sentence:
             normalized_text = self.normalize_string(text)
             tokenized_text = [self.voc[word] if word in self.voc else 3 for word in normalized_text.split(' ')]
             tokenized_text.append(self.EOS_token)
+            max_length.append(len(tokenized_text))
             max_size = np.zeros(80, dtype=np.int32)
             max_size[:len(tokenized_text)] = tokenized_text
             tokenized_sentence.append(max_size)
@@ -175,12 +169,9 @@ class FlickrDataset(Dataset):
 
     def __getitem__(self, idx):
         caption = self.captions[idx]
-        # print([caption])
         img_name = self.imgs[idx]
         img_location = os.path.join('flickr/Images', img_name)
         image= Image.open(img_location).convert("RGB")
-        # plt.imshow(image)
-        # plt.show()
         img_captions, max_caption = self.tokenize_sentence([caption])
 
         if self.transform:
@@ -188,12 +179,8 @@ class FlickrDataset(Dataset):
 
         return {
             "image": image,
-            "title": torch.tensor(np.array(img_captions), dtype=torch.long, device=device),
             "meme_captions": torch.tensor(np.array(img_captions), dtype=torch.long, device=device),
-            "img_captions": torch.tensor(np.array(img_captions), dtype=torch.long, device=device),
-            "valid": True,
             "max_caption":max_caption,
-            "max_img":max_caption
         }
 
 
