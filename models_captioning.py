@@ -17,27 +17,28 @@ if torch.cuda.is_available():
 
 
 class EncoderCNN(nn.Module):
-    def __init__(self, backbone='resnet'):
+    def __init__(self, backbone='resnet', attention = True):
         super(EncoderCNN, self).__init__()
 
         self.model_type = backbone
+        self.multihead = attention
 
         if backbone == "resnet":
             self.model = torchvision.models.resnet101(pretrained=True)
             # torch.save(self.resnet.state_dict(), 'checkpoint/resnet_weights.pth')
             self.model.load_state_dict(torch.load("checkpoint/resnet_weights.pth"))
-            self.model.fc = nn.Identity()  # "Remove" fully connected layer
+            self.model = torch.nn.Sequential(*(list(self.model.children())[:-1]))
+            num_features = 2048
 
         if backbone == "efficientnet":
             self.model = EfficientNet.from_pretrained('efficientnet-b0') # Load a pretrained EfficientNet model
             self.model._avg_pooling = nn.Identity()
             self.model._dropout = nn.Identity()
-            num_features = self.model._fc.in_features
+            num_features = 1280
             print(num_features)
             self.model._fc = nn.Identity()
-            self.attention = SelfAttentionCNN(in_dim=num_features)
-            self.avgpool = nn.AdaptiveAvgPool2d(1)
-
+        if attention:
+            self.attention = AttentionMultiHeadCNN(input_size=num_features, hidden_size=num_features,nr_heads=4)
         self.adaptive_pool = nn.AdaptiveAvgPool2d((14, 14))
 
     def forward(self, input, plot_features=False):
@@ -47,7 +48,6 @@ class EncoderCNN(nn.Module):
                 x = self.model(input[0].unsqueeze(0))
             else:
                 x = self.model.extract_features(input[0].unsqueeze(0))
-
             # Retrieve the original image and overlay extracted feature maps over it
             np_image = input[0].unsqueeze(0).squeeze().permute(1, 2, 0).cpu().numpy()
             fig = plt.figure()
@@ -66,8 +66,9 @@ class EncoderCNN(nn.Module):
             whole_image_features = self.model(input)
         else:
             whole_image_features = self.model.extract_features(input)
-        context, weights = self.attention(whole_image_features)
-        print(context.shape)
+        weights = 0
+        if self.multihead:
+            context, weights = self.attention(whole_image_features)
         # Check if avg pool is necessary?  we need shape (batch_size, 2048, encoded_image_size, encoded_image_size)
         # context = self.avgpool(context)
         # context = context.view(context.size(0), -1)
@@ -198,13 +199,17 @@ class DecoderLSTM(nn.Module):
     SOS_token = 1
     EOS_token = 2
 
-    def __init__(self, hidden_size, embed_size, output_size, num_layers=1, vocab=None, attention="True"):
+    def __init__(self, hidden_size, embed_size, output_size, num_layers=1, vocab=None, attention=True):
         super(DecoderLSTM, self).__init__()
         if vocab is None:
             self.embedding = nn.Embedding(output_size, embed_size)
 
         self.dropout = nn.Dropout(0.5)
-        self.LSTM = nn.LSTMCell(embed_size + 1280, hidden_size)
+        if attention:
+            self.LSTM = nn.LSTMCell(embed_size + 1280, hidden_size)
+        else:
+            self.LSTM = nn.LSTMCell(embed_size, hidden_size)
+
         # self.LSTM = nn.LSTM(embed_size + 2048, hidden_size, num_layers, batch_first=True)
         self.out = nn.Linear(hidden_size, output_size)  # 2 for direction and 2 for image/hidden concat
         self.num_layers = num_layers

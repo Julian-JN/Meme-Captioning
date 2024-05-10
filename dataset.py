@@ -42,7 +42,7 @@ class MemeDatasetFromFile(Dataset):
         # self.transform = transforms.Compose([transforms.Resize((300, 300)),  # Example: Resize to 224x224
         #                                      transforms.ToTensor(),
         #                                      transforms.Normalize([0.5471, 0.5182, 0.49696], [0.2940, 0.2934, 0.2992])])
-        self.transform = transforms.Compose([transforms.Resize((256, 256)),  # Example: Resize to 224x224
+        self.transform = transforms.Compose([transforms.Resize((448, 448)),  # Example: Resize to 224x224
                                              transforms.ToTensor()
                                              ])
         # transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])

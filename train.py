@@ -82,19 +82,50 @@ def visualize_att(image, seq, alphas, smooth=False, mode="cap"):
         plt.close(fig)
 
 
+def visualize_encoder_attention(img, attention_map):
+    """
+    Visualize attention map on the image
+    img: [3, W, H] PyTorch tensor (image)
+    attention_map: [W*H, W*H] PyTorch tensor (attention map)
+    """
+    img = img.squeeze(0) # check shape
+    attention_map = attention_map.squeeze(0)
+    img = img.permute(1, 2, 0)  # [N, N, 3]
+    attention_map = attention_map.cpu().detach().numpy()
+    attention_map = np.mean(attention_map, axis=0)  # Average over first dimension
+
+    attention_map = attention_map.reshape(int(np.sqrt(attention_map.shape[0])),
+                                          int(np.sqrt(attention_map.shape[0])))  # Reshape to W * H
+    attention_map = (attention_map - np.min(attention_map)) / (
+                np.max(attention_map) - np.min(attention_map))  # Normalisation
+
+    fig = plt.figure(figsize=(10, 10))
+    plt.subplot(1, 2, 1)
+    plt.imshow(img.cpu().detach().numpy())
+    plt.title('Image')
+
+    plt.subplot(1, 2, 2)
+    im = plt.imshow(attention_map, cmap='Greys_r')  # Add attention map
+    plt.title('Attention Map')
+    plt.colorbar(im, fraction=0.046, pad=0.04)  # Add colorbar as legend
+    # plt.close(fig)
+    wandb.log({"Encoder Attention": wandb.Image(fig)})
+
 def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", length=80):
     with torch.no_grad():
         # print(length)
         if mode == "train":
             max_cap = length
             target_cap = caption
-            plot_feature = True
+            plot_feature = False
         else:
             max_cap = length
             target_cap = None
-            plot_feature = False
+            plot_feature = True
 
-        encoder_outputs,_ = encoder(input_tensor, plot_feature)
+        encoder_outputs,weights = encoder(input_tensor, plot_feature)
+        visualize_encoder_attention(input_tensor[0], weights[0])
+
         caption_output, _, attention_weights = decoder_cap(encoder_outputs, caption,
                                                            target_tensor=target_cap, max_caption=max_cap)
         caption_output = F.log_softmax(caption_output, dim=-1)
@@ -191,11 +222,13 @@ def val_epoch(dataloader, encoder, decoder_cap, decoder_img, criterion, output_l
         l2_norm = sum(torch.norm(p, 2) ** 2 for p in decoder_cap.parameters())
         loss_mix = loss + loss_img + loss_attention
 
-        if total_samples % 50 == 0:
+        if total_samples % 20 == 0:
             captions, attention_weights = evaluate(encoder, decoder_cap, images, meme_captions,
                                                    output_lang, mode="val", length=max_caption)
             img_caption, attention_weights_img = evaluate(encoder, decoder_img, images, img_captions,
                                                           output_lang, mode="val", length=max_img)
+            visualize_att(images, captions, attention_weights, mode="cap")
+
             total_text = ""
             for caption in captions:
                 converted_list = map(str, caption)
@@ -290,8 +323,7 @@ def train_epoch(dataloader, encoder, decoder_cap, decoder_img, encoder_optimizer
     return total_loss / len(dataloader)
 
 
-def train(
-        train_dataloader, val_dataloader, encoder, decoder_cap, decoder_img, n_epochs, logger, output_lang,
+def train(train_dataloader, val_dataloader, encoder, decoder_cap, decoder_img, n_epochs, logger, output_lang,
         learning_rate=4e-4,
         print_every=100, plot_every=100):
 
@@ -402,16 +434,18 @@ def main():
     train_dataloader = torch.utils.data.DataLoader(train_set, batch_size=8, shuffle=False)
     print("Training")
     print(len(train_set))
+    print("Validation")
+    print(len(val_set))
     val_dataloader = torch.utils.data.DataLoader(val_set, batch_size=8, shuffle=False)
 
-    encoder = EncoderCNN(backbone='efficientnet').to(device)
+    encoder = EncoderCNN(backbone='efficientnet', attention=True).to(device)
     decoder_cap = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1, attention=True).to(
         device)
     decoder_img = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1, attention=True).to(
         device)
 
-    wandb_logger = Logger(f"inm706_coursework_new_attention_encoder",
-                          project='inm706_cw_new_attention_encoder', model=decoder_cap)
+    wandb_logger = Logger(f"memes-efficientnet-bahdanau-selfAttention",
+                          project='INM706-EXPERIMENTS', model=decoder_cap)
     logger = wandb_logger.get_logger()
 
     train(train_dataloader, val_dataloader, encoder, decoder_cap, decoder_img, n_epochs, logger, train_dataset,

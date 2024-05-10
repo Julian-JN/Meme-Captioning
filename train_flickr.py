@@ -49,7 +49,7 @@ def clip_gradient(optimizer, grad_clip):
                 param.grad.data.clamp_(-grad_clip, grad_clip)
 
 
-def visualize_att(image, seq, alphas, smooth=False, mode="cap"):
+def visualize_att(image, seq, alphas, mode="cap"):
     image = transforms.ToPILImage()(image[0].unsqueeze(0).squeeze(0))
     image = image.resize([14 * 24, 14 * 24], Image.LANCZOS)
     # Only plot first element from batch
@@ -67,10 +67,7 @@ def visualize_att(image, seq, alphas, smooth=False, mode="cap"):
         else:
             current_alpha = current_alpha.view(-1, 14, 14).squeeze(0).mean(0)  # mean if object detection included
 
-        if smooth:
-            alpha = skimage.transform.pyramid_expand(current_alpha.cpu().numpy(), upscale=24, sigma=8)
-        else:
-            alpha = skimage.transform.resize(current_alpha.cpu().numpy(), [14 * 24, 14 * 24])
+        alpha = skimage.transform.resize(current_alpha.cpu().numpy(), [14 * 24, 14 * 24])
 
         plt.imshow(alpha, alpha=0.65, cmap='Greys_r')
         plt.axis('off')
@@ -81,21 +78,50 @@ def visualize_att(image, seq, alphas, smooth=False, mode="cap"):
         # plt.show()
         plt.close(fig)
 
+def visualize_encoder_attention(img, attention_map):
+    """
+    Visualize attention map on the image
+    img: [3, W, H] PyTorch tensor (image)
+    attention_map: [W*H, W*H] PyTorch tensor (attention map)
+    """
+    img = img.squeeze(0) # check shape
+    attention_map = attention_map.squeeze(0)
+    img = img.permute(1, 2, 0)  # [N, N, 3]
+    attention_map = attention_map.cpu().detach().numpy()
+    attention_map = np.mean(attention_map, axis=0)  # Average over first dimension
+
+    attention_map = attention_map.reshape(int(np.sqrt(attention_map.shape[0])),
+                                          int(np.sqrt(attention_map.shape[0])))  # Reshape to W * H
+    attention_map = (attention_map - np.min(attention_map)) / (
+                np.max(attention_map) - np.min(attention_map))  # Normalisation
+
+    fig = plt.figure(figsize=(10, 10))
+    plt.subplot(1, 2, 1)
+    plt.imshow(img.cpu().detach().numpy())
+    plt.title('Image')
+
+    plt.subplot(1, 2, 2)
+    im = plt.imshow(attention_map, cmap='Greys_r')  # Add attention map
+    plt.title('Attention Map')
+    plt.colorbar(im, fraction=0.046, pad=0.04)  # Add colorbar as legend
+    # plt.close(fig)
+    wandb.log({"Encoder Attention": wandb.Image(fig)})
+
 
 def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", length=80):
     with torch.no_grad():
         if mode == "train":
             max_cap = length
             target_cap = caption
-            plot_feature = True
+            plot_feature = False
         else:
             max_cap = length
             target_cap = None
-            plot_feature = False
+            plot_feature = True
 
-        encoder_outputs, _ = encoder(input_tensor, plot_feature)
-        caption_output, _, attention_weights = decoder_cap(encoder_outputs, caption,
-                                                           target_tensor=target_cap, max_caption=max_cap)
+        encoder_outputs, weights = encoder(input_tensor, plot_feature)
+        visualize_encoder_attention(input_tensor[0], weights[0])
+        caption_output, _, attention_weights = decoder_cap(encoder_outputs, caption,target_tensor=target_cap, max_caption=max_cap)
         caption_output = F.log_softmax(caption_output, dim=-1)
         decoded_caption = token2text(caption_output, voc)
     return decoded_caption, attention_weights
@@ -177,6 +203,7 @@ def val_epoch(dataloader, encoder, decoder_cap, criterion, output_lang):
         if total_samples % 100 == 0:
             captions, attention_weights = evaluate(encoder, decoder_cap, images, meme_captions, output_lang, mode="val",
                                                    length=max_caption)
+            visualize_att(images, captions, attention_weights, mode="cap")
             total_text = ""
             for caption in captions:
                 converted_list = map(str, caption)
@@ -268,20 +295,20 @@ def train(train_dataloader, val_dataloader, encoder, decoder_cap, n_epochs, logg
     bleu_print_loss_total = 0  # Reset every print_every
     bleu_plot_loss_total = 0  # Reset every plot_every
 
-    encoder_optimizer = optim.Adam(params=filter(lambda p: p.requires_grad, encoder.parameters()), lr=1e-5)
-    decoder_optimizer_cap = optim.Adam(params=filter(lambda p: p.requires_grad, decoder_cap.parameters()),
-                                       lr=learning_rate)
+    encoder_optimizer = optim.Adam(encoder.parameters(), lr=1e-5)
+    decoder_optimizer_cap = optim.Adam(decoder_cap.parameters(),lr=learning_rate)
     criterion = nn.CrossEntropyLoss(ignore_index=0).to(device)
 
     for epoch in range(1, n_epochs + 1):
         print(epoch)
-        loss = train_epoch(train_dataloader, encoder.train(), decoder_cap.train(),
-                           encoder_optimizer, decoder_optimizer_cap,
-                           criterion,
-                           output_lang)
+        encoder.train()
+        decoder_cap.train()
+        loss = train_epoch(train_dataloader, encoder, decoder_cap,encoder_optimizer, decoder_optimizer_cap,
+                           criterion,output_lang)
 
-        val_loss, bleu_loss = val_epoch(val_dataloader, encoder.eval(), decoder_cap.eval(), criterion,
-                                        output_lang)
+        encoder.train()
+        decoder_cap.train()
+        val_loss, bleu_loss = val_epoch(val_dataloader, encoder, decoder_cap, criterion,output_lang)
 
         print_loss_total += loss
         plot_loss_total += loss
@@ -336,16 +363,16 @@ def main():
     train_dataset = FlickrDataset(path_train)
     train_len = int(len(train_dataset) * 0.9)
     train_set, val_set = random_split(train_dataset, [train_len, len(train_dataset) - train_len])
-    train_dataloader = torch.utils.data.DataLoader(train_set, batch_size=16, shuffle=False)
+    train_dataloader = torch.utils.data.DataLoader(train_set, batch_size=8, shuffle=False)
     print("Training")
     print(len(train_set))
-    val_dataloader = torch.utils.data.DataLoader(val_set, batch_size=16, shuffle=False)
+    val_dataloader = torch.utils.data.DataLoader(val_set, batch_size=8, shuffle=False)
 
-    encoder = EncoderCNN(backbone='efficientnet').to(device)
-    decoder_cap = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1, attention=True).to(
+    encoder = EncoderCNN(backbone='resnet', attention=False).to(device)
+    decoder_cap = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1, attention=False).to(
         device)
 
-    wandb_logger = Logger(f"tests",
+    wandb_logger = Logger(f"resnet-baseline",
                           project='INM706-EXPERIMENTS', model=decoder_cap)
     logger = wandb_logger.get_logger()
 
