@@ -93,7 +93,7 @@ def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", lengt
         else:
             max_cap = length
             target_cap = None
-            plot_feature = False
+            plot_feature = True
 
         encoder_outputs, weights = encoder(input_tensor, plot_feature)
         if plot_encoder_attention:
@@ -297,8 +297,8 @@ def main():
     decoder_cap = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1,
                               attention=model_setting['decoder_bahdanau']).to(device)
 
-    load_checkpoint(encoder, "train_checkpoint/LSTM_Captions_decoder_Cap_ckpt.pth")
-    load_checkpoint(decoder_cap, "train_checkpoint/LSTM_Captions_decoder_Cap_ckpt.pth")
+    load_checkpoint(encoder, "train_checkpoint/Resnet-LSTM_Captions_encoder_ckpt.pth")
+    load_checkpoint(decoder_cap, "train_checkpoint/Resnet-LSTM_Captions_decoder_Cap_ckpt.pth")
 
     test(test_dataloader, encoder, decoder_cap, train_dataset,
           plot_encoder_attention=model_setting['encoder_attention'],

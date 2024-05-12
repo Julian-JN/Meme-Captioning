@@ -27,7 +27,7 @@ class EncoderCNN(nn.Module):
             self.model = torchvision.models.resnet101(pretrained=True)
             # torch.save(self.resnet.state_dict(), 'checkpoint/resnet_weights.pth')
             self.model.load_state_dict(torch.load("checkpoint/resnet_weights.pth"))
-            self.model = torch.nn.Sequential(*(list(self.model.children())[:-1]))
+            self.model = torch.nn.Sequential(*(list(self.model.children())[:-2]))
             num_features = 2048
 
         if backbone == "efficientnet":
@@ -60,6 +60,7 @@ class EncoderCNN(nn.Module):
                 plt.title("Feature Map from CNN Layer")
                 plt.axis('off')  # Hide axes
                 wandb.log({"Extracted features": wandb.Image(fig)})
+                plt.show() # off when training
                 plt.close(fig)
 
         if self.model_type == "resnet":
@@ -123,7 +124,7 @@ class BahdanauAttention(nn.Module):
     def __init__(self, hidden_size):
         super(BahdanauAttention, self).__init__()
         self.W1 = nn.Linear(hidden_size, hidden_size)
-        self.W2 = nn.Linear(1280, hidden_size)  # 2048 for resnet101
+        self.W2 = nn.Linear(2048, hidden_size)  # 2048 for resnet101
         self.Va = nn.Linear(hidden_size, 1)
         self.apply(self.init_weights)
 
@@ -203,7 +204,7 @@ class DecoderLSTM(nn.Module):
 
         self.dropout = nn.Dropout(0.5)
         if attention:
-            self.LSTM = nn.LSTMCell(embed_size + 1280, hidden_size)
+            self.LSTM = nn.LSTMCell(embed_size + 2048, hidden_size)
         else:
             self.LSTM = nn.LSTMCell(embed_size, hidden_size)
 
@@ -215,10 +216,10 @@ class DecoderLSTM(nn.Module):
             self.attention_function = self.forward_step_bahdanau
         else:
             self.attention_function = self.forward_step
-        self.init_h = nn.Linear(1280, hidden_size)  # linear layer to find initial hidden state of LSTM
-        self.init_c = nn.Linear(1280, hidden_size)  # linear layer to find initial cell state of LSTM
+        self.init_h = nn.Linear(2048, hidden_size)  # linear layer to find initial hidden state of LSTM
+        self.init_c = nn.Linear(2048, hidden_size)  # linear layer to find initial cell state of LSTM
 
-        self.s_gate = nn.Linear(hidden_size, 1280)  # linear layer to create a sigmoid-activated gate
+        self.s_gate = nn.Linear(hidden_size, 2048)  # linear layer to create a sigmoid-activated gate
         self.sigmoid = nn.Sigmoid()
         ####################################################
         # init weights
