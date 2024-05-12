@@ -9,20 +9,16 @@ import torch.nn.functional as F
 from torch import optim
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
 import skimage.transform
-import matplotlib.cm as cm
 from torchvision import transforms
 
 from dataset import MemeDatasetFromFile
-from dataset_flickr import FlickrDataset
 from logger import Logger
 from models_captioning import EncoderCNN, DecoderLSTM
 from utils_functions import save_checkpoint, load_checkpoint, load_config
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data import random_split
-from torch.nn.functional import cosine_similarity
 from torch.nn.utils.rnn import pack_padded_sequence
 
 torch.manual_seed(0)
@@ -404,8 +400,9 @@ def train(train_dataloader, val_dataloader, encoder, decoder_cap, decoder_img, n
 
         # Save best validation model
         if val_loss < best_score:
-            save_checkpoint(decoder_cap, "LSTM_Captions_decoder_Cap")
-            save_checkpoint(encoder, "LSTM_Captions_encoder")
+            save_checkpoint(decoder_cap, "Memes-LSTM_Captions_decoder_Cap")
+            save_checkpoint(decoder_img, "Memes-LSTM_Captions_decoder_Img")
+            save_checkpoint(encoder, "Memes-LSTM_Captions_encoder")
             best_score = val_loss
 
         if epoch % print_every == 0:

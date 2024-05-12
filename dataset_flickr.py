@@ -28,7 +28,7 @@ class FlickrDataset(Dataset):
     UNK_token = 3
 
 
-    def __init__(self, json_file, voc_init=True):
+    def __init__(self, voc_init=True):
         """
         Initialize the MemeDatasetFromFile.
         Args:
@@ -112,6 +112,8 @@ class FlickrDataset(Dataset):
                 self.index2word[self.n_words] = word
                 self.n_words += 1
 
+    def print_info(self):
+        print(self.data.head())
 
     def create_vocab(self):
         meme_captions = self.data["caption"].tolist()
@@ -183,16 +185,14 @@ class FlickrDataset(Dataset):
             "image": image,
             "meme_captions": torch.tensor(np.array(img_captions), dtype=torch.long, device=device),
             "max_caption":max_caption,
-            # "all_captions": torch.tensor(np.array(all_captions), dtype=torch.long, device=device) # Proper Bleu eval only works in Batch size 1
+            "all_captions": torch.tensor(np.array(all_captions), dtype=torch.long, device=device) # Proper Bleu eval only works in Batch size 1
         }
 
 
 # Usage example:
 if __name__ == "__main__":
-    path_test = "data/memes-test.json"
-    path_train = "data/memes-trainval.json"
 
-    train_dataset = FlickrDataset(path_train)  # Add your image transformations if needed
+    train_dataset = FlickrDataset()  # Add your image transformations if needed
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=1, shuffle=False)
 
     instances = 0

@@ -18,7 +18,7 @@ def save_checkpoint(model, model_name):
 def load_checkpoint(model, file_name):
     ckpt = torch.load(file_name, map_location=device)
     model_weights = ckpt['model_weights']
-    model.load_state_dict(model_weights)
+    model.load_state_dict(model_weights, strict=False)
     print("Model's pretrained weights loaded!")
 
 
