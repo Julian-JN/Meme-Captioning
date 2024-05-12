@@ -1,4 +1,3 @@
-import time
 import torch
 import wandb
 import nltk
@@ -9,23 +8,18 @@ import torch.nn.functional as F
 from torch import optim
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
 import skimage.transform
-import matplotlib.cm as cm
 from torchvision import transforms
 
-from dataset import MemeDatasetFromFile
 from dataset_flickr import FlickrDataset
 from logger import Logger
 from models_captioning import EncoderCNN, DecoderLSTM
-from utils_functions import save_checkpoint, load_checkpoint
+from utils_functions import save_checkpoint, load_checkpoint, load_config
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data import random_split
-from torch.nn.functional import cosine_similarity
 from torch.nn.utils.rnn import pack_padded_sequence
 
-# from gensim.models import Word2Vec
 
 
 torch.manual_seed(0)
@@ -279,8 +273,8 @@ def train_epoch(dataloader, encoder, decoder_cap, encoder_optimizer, decoder_opt
     return total_loss / len(dataloader)
 
 
-def train(train_dataloader, val_dataloader, encoder, decoder_cap, n_epochs, logger, output_lang, learning_rate=4e-4,
-          print_every=100, plot_every=100):
+def train(train_dataloader, val_dataloader, encoder, decoder_cap, n_epochs, logger, output_lang,
+          decoder_learning_rate=1e-4, encoder_learning_rate = 1e-5, print_every=100, plot_every=100):
     plot_losses = []
     print_loss_total = 0  # Reset every print_every
     plot_loss_total = 0  # Reset every plot_every
@@ -295,8 +289,8 @@ def train(train_dataloader, val_dataloader, encoder, decoder_cap, n_epochs, logg
     bleu_print_loss_total = 0  # Reset every print_every
     bleu_plot_loss_total = 0  # Reset every plot_every
 
-    encoder_optimizer = optim.Adam(encoder.parameters(), lr=1e-5)
-    decoder_optimizer_cap = optim.Adam(decoder_cap.parameters(),lr=learning_rate)
+    encoder_optimizer = optim.Adam(encoder.parameters(), lr=encoder_learning_rate)
+    decoder_optimizer_cap = optim.Adam(decoder_cap.parameters(),lr=decoder_learning_rate)
     criterion = nn.CrossEntropyLoss(ignore_index=0).to(device)
 
     for epoch in range(1, n_epochs + 1):
@@ -306,8 +300,8 @@ def train(train_dataloader, val_dataloader, encoder, decoder_cap, n_epochs, logg
         loss = train_epoch(train_dataloader, encoder, decoder_cap,encoder_optimizer, decoder_optimizer_cap,
                            criterion,output_lang)
 
-        encoder.train()
-        decoder_cap.train()
+        encoder.eval()
+        decoder_cap.eval()
         val_loss, bleu_loss = val_epoch(val_dataloader, encoder, decoder_cap, criterion,output_lang)
 
         print_loss_total += loss
@@ -355,21 +349,31 @@ def train(train_dataloader, val_dataloader, encoder, decoder_cap, n_epochs, logg
 
 
 def main():
-    n_epochs = 40
+    config = load_config()
+    model_setting = config['model']
+    train_setting = config['train']
+    print("\n############## MODEL SETTINGS ##############")
+    print(model_setting)
+    print()
+    print("\n############## TRAIN SETTINGS ##############")
+    print(train_setting)
+    print()
+    n_epochs = train_setting['epochs']
 
-    path_test = "data/memes-test.json"
     path_train = "data/memes-trainval.json"
 
     train_dataset = FlickrDataset(path_train)
     train_len = int(len(train_dataset) * 0.9)
     train_set, val_set = random_split(train_dataset, [train_len, len(train_dataset) - train_len])
-    train_dataloader = torch.utils.data.DataLoader(train_set, batch_size=8, shuffle=False)
+    train_dataloader = torch.utils.data.DataLoader(train_set, batch_size=train_setting['batch_size'], shuffle=True)
     print("Training")
     print(len(train_set))
-    val_dataloader = torch.utils.data.DataLoader(val_set, batch_size=8, shuffle=False)
+    print("Validation")
+    print(len(val_set))
+    val_dataloader = torch.utils.data.DataLoader(val_set, batch_size=train_setting['batch_size'], shuffle=True)
 
-    encoder = EncoderCNN(backbone='resnet', attention=False).to(device)
-    decoder_cap = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1, attention=False).to(
+    encoder = EncoderCNN(backbone=model_setting['encoder_model_type'], attention=model_setting['encoder_attention']).to(device)
+    decoder_cap = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1, attention=model_setting['decoder_bahdanau']).to(
         device)
 
     wandb_logger = Logger(f"resnet-baseline",
@@ -379,8 +383,7 @@ def main():
     print(f"Length of vocabulary: {train_dataset.n_words}")
 
     train(train_dataloader, val_dataloader, encoder, decoder_cap, n_epochs, logger, train_dataset,
-          print_every=1,
-          plot_every=1)
+          print_every=1,plot_every=1, encoder_learning_rate=train_setting['encoder_learning_rate'], decoder_learning_rate=train_setting['decoder_learning_rate'])
     return
 
 

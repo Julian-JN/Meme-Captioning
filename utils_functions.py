@@ -21,13 +21,8 @@ def load_checkpoint(model, file_name):
     model.load_state_dict(model_weights)
     print("Model's pretrained weights loaded!")
 
-def parse_arguments():
-    parser = argparse.ArgumentParser(description='Process settings from a YAML file.')
-    parser.add_argument('--config', type=str, default='config.yaml', help='Path to YAML configuration file')
-    return parser.parse_args()
 
-
-def read_settings(config_path):
-    with open(config_path, 'r') as file:
-        settings = yaml.safe_load(file)
-    return settings
+def load_config(config_path='config.yaml'):
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    return config

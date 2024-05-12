@@ -18,7 +18,7 @@ from dataset import MemeDatasetFromFile
 from dataset_flickr import FlickrDataset
 from logger import Logger
 from models_captioning import EncoderCNN, DecoderLSTM
-from utils_functions import save_checkpoint, load_checkpoint
+from utils_functions import save_checkpoint, load_checkpoint, load_config
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data import random_split
@@ -324,7 +324,7 @@ def train_epoch(dataloader, encoder, decoder_cap, decoder_img, encoder_optimizer
 
 
 def train(train_dataloader, val_dataloader, encoder, decoder_cap, decoder_img, n_epochs, logger, output_lang,
-        learning_rate=4e-4,
+        decoder_learning_rate=4e-4, encoder_learning_rate = 1e-5,
         print_every=100, plot_every=100):
 
     best_score = float('inf')
@@ -345,24 +345,29 @@ def train(train_dataloader, val_dataloader, encoder, decoder_cap, decoder_img, n
     bleu_print_loss_total_img = 0  # Reset every print_every
     bleu_plot_loss_total_img = 0  # Reset every plot_every
 
-    encoder_optimizer = optim.Adam(params=encoder.parameters(), lr=1e-5)
+    encoder_optimizer = optim.Adam(params=encoder.parameters(), lr=encoder_learning_rate)
     decoder_optimizer_cap = optim.Adam(params= decoder_cap.parameters(),
-                                       lr=learning_rate)
+                                       lr=decoder_learning_rate)
     decoder_optimizer_img = optim.Adam(params=decoder_img.parameters(),
-                                       lr=learning_rate)
-    # criterion = nn.NLLLoss(ignore_index=0)
-    # criterion = nn.NLLLoss(ignore_index=0).to(device)
+                                       lr=decoder_learning_rate)
+
     criterion = nn.CrossEntropyLoss(ignore_index=0).to(device)
 
     for epoch in range(1, n_epochs + 1):
         print(epoch)
-        loss = train_epoch(train_dataloader, encoder.train(), decoder_cap.train(), decoder_img.train(),
+        encoder.train()
+        decoder_cap.train()
+        decoder_img.train()
+        loss = train_epoch(train_dataloader, encoder, decoder_cap, decoder_img,
                            encoder_optimizer, decoder_optimizer_cap, decoder_optimizer_img,
                            criterion,
                            output_lang)
 
-        val_loss, bleu_loss, bleu_loss_img = val_epoch(val_dataloader, encoder.eval(), decoder_cap.eval(),
-                                                       decoder_img.eval(), criterion,
+        encoder.eval()
+        decoder_cap.eval()
+        decoder_img.eval()
+        val_loss, bleu_loss, bleu_loss_img = val_epoch(val_dataloader, encoder, decoder_cap,
+                                                       decoder_img, criterion,
                                                        output_lang)
 
         print_loss_total += loss
@@ -423,25 +428,32 @@ def train(train_dataloader, val_dataloader, encoder, decoder_cap, decoder_img, n
 
 
 def main():
-    n_epochs = 40
-
-    path_test = "data/memes-test.json"
+    config = load_config()
+    model_setting = config['model']
+    train_setting = config['train']
+    print("\n############## MODEL SETTINGS ##############")
+    print(model_setting)
+    print()
+    print("\n############## TRAIN SETTINGS ##############")
+    print(train_setting)
+    print()
+    n_epochs = train_setting['epochs']
     path_train = "data/memes-trainval.json"
 
     train_dataset = MemeDatasetFromFile(path_train)
     train_len = int(len(train_dataset) * 0.9)
     train_set, val_set = random_split(train_dataset, [train_len, len(train_dataset) - train_len])
-    train_dataloader = torch.utils.data.DataLoader(train_set, batch_size=8, shuffle=False)
+    train_dataloader = torch.utils.data.DataLoader(train_set, batch_size=train_setting['batch_size'], shuffle=True)
     print("Training")
     print(len(train_set))
     print("Validation")
     print(len(val_set))
-    val_dataloader = torch.utils.data.DataLoader(val_set, batch_size=8, shuffle=False)
+    val_dataloader = torch.utils.data.DataLoader(val_set, batch_size=train_setting['batch_size'], shuffle=False)
 
-    encoder = EncoderCNN(backbone='efficientnet', attention=True).to(device)
-    decoder_cap = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1, attention=True).to(
+    encoder = EncoderCNN(backbone=model_setting['encoder_model_type'], attention=model_setting['encoder_attention']).to(device)
+    decoder_cap = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1, attention=model_setting['decoder_bahdanau']).to(
         device)
-    decoder_img = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1, attention=True).to(
+    decoder_img = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1, attention=model_setting['decoder_bahdanau']).to(
         device)
 
     wandb_logger = Logger(f"memes-efficientnet-bahdanau-selfAttention",
@@ -449,8 +461,7 @@ def main():
     logger = wandb_logger.get_logger()
 
     train(train_dataloader, val_dataloader, encoder, decoder_cap, decoder_img, n_epochs, logger, train_dataset,
-          print_every=1,
-          plot_every=1)
+          print_every=1,plot_every=1, encoder_learning_rate=train_setting['encoder_learning_rate'], decoder_learning_rate=train_setting['decoder_learning_rate'])
     return
 
 
