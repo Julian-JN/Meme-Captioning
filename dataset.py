@@ -160,8 +160,8 @@ class MemeDatasetFromFile(Dataset):
 
         # If multiple captions, choose randomly from choice
         random_choice = random.choice(tokenized_sentence)
-        tokenized_sentence = [random_choice]
-        return tokenized_sentence, max(max_length)
+        random_tokenized_sentence = [random_choice]
+        return random_tokenized_sentence, tokenized_sentence, max(max_length)
 
     def load_data_from_json(self, file):
         with open(file, 'r', encoding='utf-8') as f:
@@ -176,8 +176,8 @@ class MemeDatasetFromFile(Dataset):
 
         image_path = "img_meme/memes/"
         image = Image.open(os.path.join(image_path, self.meme_name[idx])).convert('RGB')
-        meme_captions, max_caption = self.tokenize_sentence(meme_info["meme_captions"])
-        img_captions, max_img = self.tokenize_sentence(meme_info["img_captions"])
+        meme_captions, all_captions, max_caption = self.tokenize_sentence(meme_info["meme_captions"])
+        img_captions, all_img_captions, max_img = self.tokenize_sentence(meme_info["img_captions"])
 
         if self.transform:
             image = self.transform(image).to(device)
@@ -188,7 +188,11 @@ class MemeDatasetFromFile(Dataset):
             "meme_captions": torch.tensor(np.array(meme_captions), dtype=torch.long, device=device),
             "img_captions": torch.tensor(np.array(img_captions), dtype=torch.long, device=device),
             "max_caption":max_caption,
-            "max_img":max_img
+            "max_img":max_img,
+            # Proper Bleu eval only works in Batch size 1.
+            # "all_captions": torch.tensor(np.array(all_captions), dtype=torch.long, device=device),
+            # "all_img_captions": torch.tensor(np.array(all_img_captions), dtype=torch.long, device=device)
+
         }
 
 
@@ -201,6 +205,8 @@ if __name__ == "__main__":
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=1, shuffle=False)
 
     instances = 0
-    for batch in train_dataloader:
+    for data in train_dataloader:
+        meme_captions = data["all_captions"].squeeze(1)
+        print(meme_captions.shape)
         instances += 1
     print(instances)

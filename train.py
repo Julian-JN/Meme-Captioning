@@ -111,7 +111,7 @@ def visualize_encoder_attention(img, attention_map):
     # plt.close(fig)
     wandb.log({"Encoder Attention": wandb.Image(fig)})
 
-def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", length=80):
+def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", length=80, plot_encoder_attention=False):
     with torch.no_grad():
         # print(length)
         if mode == "train":
@@ -124,7 +124,8 @@ def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", lengt
             plot_feature = True
 
         encoder_outputs,weights = encoder(input_tensor, plot_feature)
-        visualize_encoder_attention(input_tensor[0], weights[0])
+        if plot_encoder_attention:
+            visualize_encoder_attention(input_tensor[0], weights[0])
 
         caption_output, _, attention_weights = decoder_cap(encoder_outputs, caption,
                                                            target_tensor=target_cap, max_caption=max_cap)
@@ -178,7 +179,8 @@ def target2text(target, voc):  # for BLEU EVALUATION
     return decoded_words_total
 
 
-def val_epoch(dataloader, encoder, decoder_cap, decoder_img, criterion, output_lang):
+def val_epoch(dataloader, encoder, decoder_cap, decoder_img, criterion, output_lang,  plot_encoder_attention=False,
+              plot_decoder_attention=False):
     total_loss = 0
     total_samples = 0
     bleu_total = 0
@@ -224,10 +226,11 @@ def val_epoch(dataloader, encoder, decoder_cap, decoder_img, criterion, output_l
 
         if total_samples % 20 == 0:
             captions, attention_weights = evaluate(encoder, decoder_cap, images, meme_captions,
-                                                   output_lang, mode="val", length=max_caption)
+                                                   output_lang, mode="val", length=max_caption,plot_encoder_attention=plot_encoder_attention)
             img_caption, attention_weights_img = evaluate(encoder, decoder_img, images, img_captions,
-                                                          output_lang, mode="val", length=max_img)
-            visualize_att(images, captions, attention_weights, mode="cap")
+                                                          output_lang, mode="val", length=max_img, plot_encoder_attention=plot_encoder_attention)
+            if plot_decoder_attention:
+                visualize_att(images, captions, attention_weights, mode="cap")
 
             total_text = ""
             for caption in captions:
@@ -235,7 +238,16 @@ def val_epoch(dataloader, encoder, decoder_cap, decoder_img, criterion, output_l
                 result = ' '.join(converted_list)
                 result += "/"
                 total_text += result
-            print(f"DataPoint: {total_samples}, Text: {total_text}")
+            print(f"DataPoint Prediction: {total_samples}, Text: {total_text}")
+
+            total_target = ""
+            targets_dec = target2text(meme_captions, output_lang)
+            for caption in targets_dec:
+                converted_list = map(str, caption)
+                result = ' '.join(converted_list)
+                result += "/"
+                total_target += result
+            print(f"Datapoint Target: {total_target}")
 
             columns = ["Datapoint", "Output"]
             data = [[str(total_samples), total_text]]
@@ -248,7 +260,16 @@ def val_epoch(dataloader, encoder, decoder_cap, decoder_img, criterion, output_l
                 result = ' '.join(converted_list)
                 result += "/"
                 total_text += result
-            print(f"DataPoint IMG: {total_samples}, Text: {total_text}")
+            print(f"DataPoint IMG Prediction: {total_samples}, Text: {total_text}")
+
+            total_target = ""
+            targets_dec = target2text(img_captions, output_lang)
+            for caption in targets_dec:
+                converted_list = map(str, caption)
+                result = ' '.join(converted_list)
+                result += "/"
+                total_target += result
+            print(f"Datapoint IMG Target: {total_target}")
 
             columns = ["Datapoint", "Output"]
             data = [[str(total_samples), total_text]]
@@ -325,7 +346,7 @@ def train_epoch(dataloader, encoder, decoder_cap, decoder_img, encoder_optimizer
 
 def train(train_dataloader, val_dataloader, encoder, decoder_cap, decoder_img, n_epochs, logger, output_lang,
         decoder_learning_rate=4e-4, encoder_learning_rate = 1e-5,
-        print_every=100, plot_every=100):
+        print_every=100, plot_every=100, plot_encoder_attention=False, plot_decoder_attention=False):
 
     best_score = float('inf')
 
@@ -367,8 +388,7 @@ def train(train_dataloader, val_dataloader, encoder, decoder_cap, decoder_img, n
         decoder_cap.eval()
         decoder_img.eval()
         val_loss, bleu_loss, bleu_loss_img = val_epoch(val_dataloader, encoder, decoder_cap,
-                                                       decoder_img, criterion,
-                                                       output_lang)
+        decoder_img, criterion,output_lang, plot_encoder_attention=plot_encoder_attention, plot_decoder_attention=plot_decoder_attention)
 
         print_loss_total += loss
         plot_loss_total += loss
@@ -461,7 +481,8 @@ def main():
     logger = wandb_logger.get_logger()
 
     train(train_dataloader, val_dataloader, encoder, decoder_cap, decoder_img, n_epochs, logger, train_dataset,
-          print_every=1,plot_every=1, encoder_learning_rate=train_setting['encoder_learning_rate'], decoder_learning_rate=train_setting['decoder_learning_rate'])
+          print_every=1,plot_every=1, encoder_learning_rate=train_setting['encoder_learning_rate'], decoder_learning_rate=train_setting['decoder_learning_rate'],
+          plot_encoder_attention=model_setting['encoder_attention'], plot_decoder_attention=model_setting['decoder_bahdanau'])
     return
 
 

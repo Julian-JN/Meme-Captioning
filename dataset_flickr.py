@@ -40,8 +40,7 @@ class FlickrDataset(Dataset):
         #                                      transforms.ToTensor(),
         #                                      transforms.Normalize([0.5471, 0.5182, 0.49696], [0.2940, 0.2934, 0.2992])])
         self.transform = transforms.Compose([transforms.Resize((512, 512)),  # Example: Resize to 224x224
-                                             transforms.ToTensor(),
-                                             transforms.RandomHorizontalFlip()])
+                                             transforms.ToTensor()])
         # transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         caption_file = 'flickr' + '/captions.txt'
         self.data = pd.read_csv(caption_file)
@@ -170,6 +169,9 @@ class FlickrDataset(Dataset):
     def __getitem__(self, idx):
         caption = self.captions[idx]
         img_name = self.imgs[idx]
+        matching_captions = self.data.loc[self.data["image"] == img_name, "caption"]
+        all_captions = matching_captions.tolist()
+        all_captions, max_all_caption = self.tokenize_sentence(all_captions)
         img_location = os.path.join('flickr/Images', img_name)
         image= Image.open(img_location).convert("RGB")
         img_captions, max_caption = self.tokenize_sentence([caption])
@@ -181,6 +183,7 @@ class FlickrDataset(Dataset):
             "image": image,
             "meme_captions": torch.tensor(np.array(img_captions), dtype=torch.long, device=device),
             "max_caption":max_caption,
+            # "all_captions": torch.tensor(np.array(all_captions), dtype=torch.long, device=device) # Proper Bleu eval only works in Batch size 1
         }
 
 
@@ -193,6 +196,8 @@ if __name__ == "__main__":
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=1, shuffle=False)
 
     instances = 0
-    for batch in train_dataloader:
-            instances += 1
+    for data in train_dataloader:
+        meme_captions = data["all_captions"].squeeze(1)
+        print(meme_captions.shape)
+        instances += 1
     print(instances)

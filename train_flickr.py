@@ -102,7 +102,7 @@ def visualize_encoder_attention(img, attention_map):
     wandb.log({"Encoder Attention": wandb.Image(fig)})
 
 
-def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", length=80):
+def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", length=80, plot_encoder_attention=False):
     with torch.no_grad():
         if mode == "train":
             max_cap = length
@@ -114,7 +114,8 @@ def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", lengt
             plot_feature = True
 
         encoder_outputs, weights = encoder(input_tensor, plot_feature)
-        visualize_encoder_attention(input_tensor[0], weights[0])
+        if plot_encoder_attention:
+            visualize_encoder_attention(input_tensor[0], weights[0])
         caption_output, _, attention_weights = decoder_cap(encoder_outputs, caption,target_tensor=target_cap, max_caption=max_cap)
         caption_output = F.log_softmax(caption_output, dim=-1)
         decoded_caption = token2text(caption_output, voc)
@@ -128,6 +129,15 @@ def calculate_bleu(target, predicted):
     bleu_score = nltk.translate.bleu_score.corpus_bleu(references, hypotheses, weights=(0.25, 0.25, 0.25, 0.25),
                                                        smoothing_function=nltk.translate.bleu_score.SmoothingFunction().method1)
     return bleu_score
+
+
+def calculate_meteor(target, predicted):
+    references = [[caption] for caption in target]
+    hypotheses = [caption for caption in predicted]
+
+    # Calculate METEOR score
+    meteor_score = nltk.translate.meteor_score.meteor_score(references, hypotheses)
+    return meteor_score
 
 
 def token2text(output, voc):
@@ -166,7 +176,8 @@ def target2text(target, voc):  # for BLEU EVALUATION
     return decoded_words_total
 
 
-def val_epoch(dataloader, encoder, decoder_cap, criterion, output_lang):
+def val_epoch(dataloader, encoder, decoder_cap, criterion, output_lang, plot_encoder_attention=False,
+              plot_decoder_attention=False):
     total_loss = 0
     total_samples = 0
     bleu_total = 0
@@ -196,8 +207,9 @@ def val_epoch(dataloader, encoder, decoder_cap, criterion, output_lang):
 
         if total_samples % 100 == 0:
             captions, attention_weights = evaluate(encoder, decoder_cap, images, meme_captions, output_lang, mode="val",
-                                                   length=max_caption)
-            visualize_att(images, captions, attention_weights, mode="cap")
+                                                   length=max_caption, plot_encoder_attention=plot_encoder_attention)
+            if plot_decoder_attention:
+                visualize_att(images, captions, attention_weights, mode="cap")
             total_text = ""
             for caption in captions:
                 converted_list = map(str, caption)
@@ -274,7 +286,8 @@ def train_epoch(dataloader, encoder, decoder_cap, encoder_optimizer, decoder_opt
 
 
 def train(train_dataloader, val_dataloader, encoder, decoder_cap, n_epochs, logger, output_lang,
-          decoder_learning_rate=1e-4, encoder_learning_rate = 1e-5, print_every=100, plot_every=100):
+          decoder_learning_rate=1e-4, encoder_learning_rate = 1e-5, print_every=100, plot_every=100,
+          plot_encoder_attention=False, plot_decoder_attention=False):
     plot_losses = []
     print_loss_total = 0  # Reset every print_every
     plot_loss_total = 0  # Reset every plot_every
@@ -302,7 +315,7 @@ def train(train_dataloader, val_dataloader, encoder, decoder_cap, n_epochs, logg
 
         encoder.eval()
         decoder_cap.eval()
-        val_loss, bleu_loss = val_epoch(val_dataloader, encoder, decoder_cap, criterion,output_lang)
+        val_loss, bleu_loss = val_epoch(val_dataloader, encoder, decoder_cap, criterion,output_lang, plot_encoder_attention=plot_encoder_attention, plot_decoder_attention=plot_decoder_attention)
 
         print_loss_total += loss
         plot_loss_total += loss
@@ -376,21 +389,21 @@ def main():
     decoder_cap = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1, attention=model_setting['decoder_bahdanau']).to(
         device)
 
-    wandb_logger = Logger(f"resnet-baseline",
-                          project='INM706-EXPERIMENTS', model=decoder_cap)
+    wandb_logger = Logger(f"FlICKR-resnet-baseline",
+                          project='INM706-FINAL', model=decoder_cap)
     logger = wandb_logger.get_logger()
 
     print(f"Length of vocabulary: {train_dataset.n_words}")
 
     train(train_dataloader, val_dataloader, encoder, decoder_cap, n_epochs, logger, train_dataset,
-          print_every=1,plot_every=1, encoder_learning_rate=train_setting['encoder_learning_rate'], decoder_learning_rate=train_setting['decoder_learning_rate'])
+          print_every=1,plot_every=1, encoder_learning_rate=train_setting['encoder_learning_rate'], decoder_learning_rate=train_setting['decoder_learning_rate'],
+          plot_encoder_attention=model_setting['encoder_attention'], plot_decoder_attention=model_setting['decoder_bahdanau'])
     return
 
 
 # TODO:
-# Baseline: Resnet without attention
-# Improvement: Resnet with Bahnadanu attention
-# Evaluate encoder performance: Resnet vs EfficentNet
+# Baseline: Resnet vs EfficientNet
+# Improvement: EfficientNet with Bahdanau attention
 # Evaluate: Add self attention to encoder
 
 

@@ -65,16 +65,13 @@ class EncoderCNN(nn.Module):
         if self.model_type == "resnet":
             whole_image_features = self.model(input)
         else:
-            whole_image_features = self.model.extract_features(input)
+            whole_image_features = self.model.extract_features(input) # (batch_size, 2048, encoded_image_size, encoded_image_size)
         weights = 0
         if self.multihead:
-            context, weights = self.attention(whole_image_features)
-        # Check if avg pool is necessary?  we need shape (batch_size, 2048, encoded_image_size, encoded_image_size)
-        # context = self.avgpool(context)
-        # context = context.view(context.size(0), -1)
-        whole_image_features = self.adaptive_pool(whole_image_features)  # (batch_size, 2048, encoded_image_size, encoded_image_size)
+            context, weights = self.attention(whole_image_features) # (batch_size, 2048, encoded_image_size, encoded_image_size)
+        whole_image_features = self.adaptive_pool(whole_image_features)  # (batch_size, 2048, 14, 14)
         whole_image_features = whole_image_features.permute(0, 2, 3, 1)
-        whole_image_features = whole_image_features.contiguous().view(whole_image_features.size(0), -1,  whole_image_features.size(-1))
+        whole_image_features = whole_image_features.contiguous().view(whole_image_features.size(0), -1,  whole_image_features.size(-1)) # (batch_size, 2048, 196)
         return whole_image_features, weights
 
 class AttentionMultiHeadCNN(nn.Module):
@@ -280,10 +277,10 @@ class DecoderLSTM(nn.Module):
         return decoder_outputs, decoder_hidden, attentions  # We return `None` for consistency in the training loop
 
     def forward_step(self, input, hidden, image, image_feature):
-        mean_encoder_out = image.mean(dim=1)
         if type(hidden) is tuple:
             hidden, cell = hidden
-        if image_feature: # Initial ibput is an image
+        if image_feature: # Initial input is an image
+            mean_encoder_out = image.mean(dim=1)
             hidden = self.init_h(mean_encoder_out)  # (batch_size, decoder_dim)
             cell = self.init_c(mean_encoder_out)
         hidden, cell = self.LSTM(input, (hidden, cell))
@@ -291,10 +288,10 @@ class DecoderLSTM(nn.Module):
         return output, (hidden, cell), output
 
     def forward_step_bahdanau(self, input, hidden, image, image_feature):
-        mean_encoder_out = image.mean(dim=1)
         if type(hidden) is tuple:
             hidden, cell = hidden
-        if image_feature: # Initial ibput is an image
+        if image_feature: # Initial input is an image
+            mean_encoder_out = image.mean(dim=1)  # (batch_size, 196)
             hidden = self.init_h(mean_encoder_out)  # (batch_size, decoder_dim)
             cell = self.init_c(mean_encoder_out)
 
