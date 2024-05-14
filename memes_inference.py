@@ -338,9 +338,9 @@ def main():
     decoder_img = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1,
                               attention=model_setting['decoder_bahdanau']).to(device)
 
-    load_checkpoint(encoder, "train_checkpoint/MEMES_Finer-EfficientB5-BA-selfAttention-LSTM_Captions_encoder_ckpt.pth")
-    load_checkpoint(decoder_cap, "train_checkpoint/MEMES_Finer-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_Cap_ckpt.pth")
-    load_checkpoint(decoder_img, "train_checkpoint/MEMES_Finer-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_img_ckpt.pth")
+    load_checkpoint(encoder, "train_checkpoint/FINAL-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_encoder_ckpt.pth")
+    load_checkpoint(decoder_cap, "train_checkpoint/FINAL-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_Cap_ckpt.pth")
+    load_checkpoint(decoder_img, "train_checkpoint/FINAL-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_img_ckpt.pth")
 
 
     test(test_dataloader, encoder, decoder_cap, decoder_img, train_dataset,
