@@ -152,7 +152,7 @@ class MemeDatasetFromFile(Dataset):
 
         for text in sentence:
             normalized_text = self.normalize_string(text)
-            print(normalized_text)
+            # print(normalized_text)
             tokenized_text = [self.voc[word] if word in self.voc else 3 for word in normalized_text.split(' ')]
             tokenized_text.append(self.EOS_token)
             max_length.append(len(tokenized_text))
@@ -193,8 +193,8 @@ class MemeDatasetFromFile(Dataset):
             "max_img":max_img,
             # Proper Bleu eval only works in Batch size 1.
             # Uncomment code below only during inference
-            # "all_captions": torch.tensor(np.array(all_captions), dtype=torch.long, device=device),
-            # "all_img_captions": torch.tensor(np.array(all_img_captions), dtype=torch.long, device=device)
+            "all_captions": torch.tensor(np.array(all_captions), dtype=torch.long, device=device),
+            "all_img_captions": torch.tensor(np.array(all_img_captions), dtype=torch.long, device=device)
 
         }
 

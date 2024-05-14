@@ -28,7 +28,7 @@ if torch.cuda.is_available():
 
 def visualize_att(image, seq, alphas, mode="cap"):
     image = transforms.ToPILImage()(image[0].unsqueeze(0).squeeze(0))
-    image = image.resize([14 * 24, 14 * 24], Image.LANCZOS)
+    image = image.resize([16 * 24, 16 * 24], Image.LANCZOS)
     # Only plot first element from batch
     caption = seq[0]
     words = caption
@@ -40,18 +40,14 @@ def visualize_att(image, seq, alphas, mode="cap"):
         plt.imshow(image)
         current_alpha = alphas[0, t, :]
         if current_alpha.size(0) == 196:
-            current_alpha = current_alpha.view(-1, 14, 14).squeeze(0)
+            current_alpha = current_alpha.view(-1, 16, 16).squeeze(0)
         else:
-            current_alpha = current_alpha.view(-1, 14, 14).squeeze(0).mean(0)  # mean if object detection included
+            current_alpha = current_alpha.view(-1, 16, 16).squeeze(0).mean(0)  # mean if object detection included
 
-        alpha = skimage.transform.resize(current_alpha.cpu().numpy(), [14 * 24, 14 * 24])
+        alpha = skimage.transform.resize(current_alpha.cpu().numpy(), [16 * 24, 16 * 24])
 
         plt.imshow(alpha, alpha=0.65, cmap='Greys_r')
         plt.axis('off')
-        if mode == "cap":
-            wandb.log({"Caption Attention": wandb.Image(fig)})
-        elif mode == "img":
-            wandb.log({"Image Caption Attention": wandb.Image(fig)})
         # plt.show()
         plt.close(fig)
 
@@ -81,8 +77,8 @@ def visualize_encoder_attention(img, attention_map):
     im = plt.imshow(attention_map, cmap='Greys_r')  # Add attention map
     plt.title('Attention Map')
     plt.colorbar(im, fraction=0.046, pad=0.04)  # Add colorbar as legend
-    # plt.close(fig)
-    wandb.log({"Encoder Attention": wandb.Image(fig)})
+    plt.show()
+    plt.close(fig)
 
 
 def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", length=80, plot_encoder_attention=False):
@@ -106,7 +102,8 @@ def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", lengt
 
 
 def calculate_bleu(target, predicted):
-    references = [[caption] for caption in target]
+    references = [target]
+    # references = [[caption] for caption in target]
     hypotheses = [caption for caption in predicted]
     # Calculate BLEU score
     bleu_score = nltk.translate.bleu_score.corpus_bleu(references, hypotheses, weights=(0.25, 0.25, 0.25, 0.25),
@@ -202,7 +199,10 @@ def test_epoch(dataloader, encoder, decoder_cap, decoder_img, criterion, output_
         loss = criterion(scores, targets)
 
         hypothesis = target2text(meme_captions, output_lang)
-        hypothesis_all = alltarget2text(all_captions, output_lang)
+        if all_captions.size(1) == 80:
+            hypothesis_all = hypothesis
+        else:
+            hypothesis_all = alltarget2text(all_captions, output_lang)
         references = F.log_softmax(caption_outputs, dim=-1)
         references = token2text(references, output_lang)
         bleu_score = calculate_bleu(hypothesis_all, references)
@@ -214,7 +214,10 @@ def test_epoch(dataloader, encoder, decoder_cap, decoder_img, criterion, output_
         loss_img = criterion(scores, targets)
 
         hypothesis_img = target2text(img_captions, output_lang)
-        hypothesis_all = alltarget2text(all_captions_img, output_lang)
+        if all_captions_img.size(1) == 80:
+            hypothesis_all = hypothesis
+        else:
+            hypothesis_all = alltarget2text(all_captions_img, output_lang)
         references_img = F.log_softmax(img_outputs, dim=-1)
         references_img = token2text(references_img, output_lang)
         bleu_score_img = calculate_bleu(hypothesis_all, references_img)
@@ -229,9 +232,9 @@ def test_epoch(dataloader, encoder, decoder_cap, decoder_img, criterion, output_
 
             plot_image = True
             if plot_image:
-                converted_list = map(str, references[0])
+                converted_list = map(str, references_img[0])
                 pred = ' '.join(converted_list)
-                converted_list = map(str, hypothesis[0])
+                converted_list = map(str, hypothesis_img[0])
                 target = ' '.join(converted_list)
                 result = "Predicted: " + pred + "/ Target:" + target
                 img = images.squeeze(0)
@@ -245,7 +248,7 @@ def test_epoch(dataloader, encoder, decoder_cap, decoder_img, criterion, output_
             img_caption, attention_weights_img = evaluate(encoder, decoder_img, images, img_captions,
                                                           output_lang, mode="val", length=max_img, plot_encoder_attention=plot_encoder_attention)
             if plot_decoder_attention:
-                visualize_att(images, captions, attention_weights, mode="cap")
+                visualize_att(images, img_caption, attention_weights_img, mode="cap")
 
             total_text = ""
             for caption in captions:
@@ -335,14 +338,10 @@ def main():
     decoder_img = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1,
                               attention=model_setting['decoder_bahdanau']).to(device)
 
-    load_checkpoint(encoder, "train_checkpoint/LSTM_Captions_decoder_Cap_ckpt.pth")
-    load_checkpoint(decoder_cap, "train_checkpoint/LSTM_Captions_decoder_Cap_ckpt.pth")
-    load_checkpoint(decoder_img, "train_checkpoint/LSTM_Captions_decoder_Cap_ckpt.pth")
+    load_checkpoint(encoder, "train_checkpoint/MEMES_Finer-EfficientB5-BA-selfAttention-LSTM_Captions_encoder_ckpt.pth")
+    load_checkpoint(decoder_cap, "train_checkpoint/MEMES_Finer-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_Cap_ckpt.pth")
+    load_checkpoint(decoder_img, "train_checkpoint/MEMES_Finer-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_img_ckpt.pth")
 
-
-    wandb_logger = Logger(f"FlICKR-resnet-baseline",
-                          project='INM706-FINAL', model=decoder_cap)
-    logger = wandb_logger.get_logger()
 
     test(test_dataloader, encoder, decoder_cap, decoder_img, train_dataset,
           plot_encoder_attention=model_setting['encoder_attention'],

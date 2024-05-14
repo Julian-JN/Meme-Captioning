@@ -304,7 +304,7 @@ def train(train_dataloader, val_dataloader, encoder, decoder_cap, n_epochs, logg
 
     encoder_optimizer = optim.Adam(encoder.parameters(), lr=encoder_learning_rate)
     decoder_optimizer_cap = optim.Adam(decoder_cap.parameters(),lr=decoder_learning_rate)
-    criterion = nn.CrossEntropyLoss(ignore_index=0).to(device)
+    criterion = nn.CrossEntropyLoss(ignore_index=3).to(device)
 
     for epoch in range(1, n_epochs + 1):
         print(epoch)
@@ -327,8 +327,8 @@ def train(train_dataloader, val_dataloader, encoder, decoder_cap, n_epochs, logg
         bleu_plot_loss_total += bleu_loss
 
         if val_loss < best_score:
-            save_checkpoint(decoder_cap, "Resnet-LSTM_Captions_decoder_Cap")
-            save_checkpoint(encoder, "Resnet-LSTM_Captions_encoder")
+            save_checkpoint(decoder_cap, "Efficient-BA-selfAttention-LSTM_Captions_decoder_Cap")
+            save_checkpoint(encoder, "Efficient-BA-selfAttention-LSTM_Captions_encoder")
             best_score = val_loss
 
         if epoch % print_every == 0:
@@ -379,12 +379,11 @@ def main():
     print("Test")
     print(len(test_set))
     val_dataloader = torch.utils.data.DataLoader(val_set, batch_size=train_setting['batch_size'], shuffle=True)
-
     encoder = EncoderCNN(backbone=model_setting['encoder_model_type'], attention=model_setting['encoder_attention']).to(device)
     decoder_cap = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1, attention=model_setting['decoder_bahdanau']).to(
         device)
 
-    wandb_logger = Logger(f"FLICKR-resnet-baseline",
+    wandb_logger = Logger(f"FLICKR-efficientnet-BA-selfAttention",
                           project='INM706-FINAL', model=decoder_cap)
     logger = wandb_logger.get_logger()
 
