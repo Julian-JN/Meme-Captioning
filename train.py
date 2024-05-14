@@ -23,7 +23,7 @@ from torch.nn.utils.rnn import pack_padded_sequence
 
 torch.manual_seed(0)
 
-# os.environ['https_proxy'] = "http://hpc-proxy00.city.ac.uk:3128"  # Proxy to train with hyperion
+os.environ['https_proxy'] = "http://hpc-proxy00.city.ac.uk:3128"  # Proxy to train with hyperion
 
 print(torch.cuda.is_available())
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -44,7 +44,7 @@ def clip_gradient(optimizer, grad_clip):
 
 def visualize_att(image, seq, alphas, smooth=False, mode="cap"):
     image = transforms.ToPILImage()(image[0].unsqueeze(0).squeeze(0))
-    image = image.resize([14 * 24, 14 * 24], Image.LANCZOS)
+    image = image.resize([16 * 24, 16 * 24], Image.LANCZOS)
     # Only plot first element from batch
     caption = seq[0]
     # print(caption)
@@ -59,14 +59,14 @@ def visualize_att(image, seq, alphas, smooth=False, mode="cap"):
         plt.text(0, 1, '%s' % (words[t]), color='black', backgroundcolor='white', fontsize=12)
         plt.imshow(image)
         current_alpha = alphas[0, t, :]
-        current_alpha = current_alpha.view(-1, 14, 14).squeeze(0)
+        current_alpha = current_alpha.view(-1, 16, 16).squeeze(0)
         # alpha = np.reshape(current_alpha, (224, 224))  # Resize to image dimensions
         # alpha /= np.max(alpha)
         # print(current_alpha.shape)
         if smooth:
             alpha = skimage.transform.pyramid_expand(current_alpha.cpu().numpy(), upscale=24, sigma=8)
         else:
-            alpha = skimage.transform.resize(current_alpha.cpu().numpy(), [14 * 24, 14 * 24])
+            alpha = skimage.transform.resize(current_alpha.cpu().numpy(), [16 * 24, 16 * 24])
 
         plt.imshow(alpha, alpha=0.65, cmap='Greys_r')
         plt.axis('off')
@@ -297,6 +297,10 @@ def train_epoch(dataloader, encoder, decoder_cap, decoder_img, encoder_optimizer
                                                             img_captions, max_img)
         scores = pack_padded_sequence(caption_outputs, max_caption, batch_first=True, enforce_sorted=False)[0]
         targets = pack_padded_sequence(meme_captions, max_caption, batch_first=True, enforce_sorted=False)[0]
+        # output = F.log_softmax(scores, dim=-1)
+        # _, topi = output.topk(1)
+        # decoded_ids = topi.squeeze(-1)
+        # print(decoded_ids)
         loss = criterion(scores, targets)
 
         scores = pack_padded_sequence(img_outputs, max_img, batch_first=True, enforce_sorted=False)[0]
@@ -341,7 +345,7 @@ def train_epoch(dataloader, encoder, decoder_cap, decoder_img, encoder_optimizer
 
 
 def train(train_dataloader, val_dataloader, encoder, decoder_cap, decoder_img, n_epochs, logger, output_lang,
-        decoder_learning_rate=4e-4, encoder_learning_rate = 1e-5,
+        decoder_learning_rate=1e-4, encoder_learning_rate = 1e-5,
         print_every=100, plot_every=100, plot_encoder_attention=False, plot_decoder_attention=False):
 
     best_score = float('inf')
@@ -368,7 +372,7 @@ def train(train_dataloader, val_dataloader, encoder, decoder_cap, decoder_img, n
     decoder_optimizer_img = optim.Adam(params=decoder_img.parameters(),
                                        lr=decoder_learning_rate)
 
-    criterion = nn.CrossEntropyLoss(ignore_index=0).to(device)
+    criterion = nn.CrossEntropyLoss(ignore_index=3).to(device) # no padding present, ignore UNK Token
 
     for epoch in range(1, n_epochs + 1):
         print(epoch)
@@ -400,10 +404,15 @@ def train(train_dataloader, val_dataloader, encoder, decoder_cap, decoder_img, n
 
         # Save best validation model
         if val_loss < best_score:
-            save_checkpoint(decoder_cap, "Memes-LSTM_Captions_decoder_Cap")
-            save_checkpoint(decoder_img, "Memes-LSTM_Captions_decoder_Img")
-            save_checkpoint(encoder, "Memes-LSTM_Captions_encoder")
+            save_checkpoint(decoder_cap, "MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_Cap")
+            save_checkpoint(decoder_img, "MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_img")
+            save_checkpoint(encoder, "MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_encoder")
             best_score = val_loss
+
+        if epoch == n_epochs:
+            save_checkpoint(decoder_cap, "FINAL-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_Cap")
+            save_checkpoint(decoder_img, "FINAL-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_img")
+            save_checkpoint(encoder, "FINAL-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_encoder")
 
         if epoch % print_every == 0:
             print_loss_avg = print_loss_total / print_every
@@ -448,13 +457,7 @@ def main():
     config = load_config()
     model_setting = config['model']
     train_setting = config['train']
-    print("\n############## MODEL SETTINGS ##############")
-    print(model_setting)
-    print()
-    print("\n############## TRAIN SETTINGS ##############")
-    print(train_setting)
-    print()
-    n_epochs = train_setting['epochs']
+
     path_train = "data/memes-trainval.json"
 
     train_dataset = MemeDatasetFromFile(path_train)
@@ -465,7 +468,7 @@ def main():
     print(len(train_set))
     print("Validation")
     print(len(val_set))
-    val_dataloader = torch.utils.data.DataLoader(val_set, batch_size=train_setting['batch_size'], shuffle=False)
+    val_dataloader = torch.utils.data.DataLoader(val_set, batch_size=train_setting['batch_size'], shuffle=True)
 
     encoder = EncoderCNN(backbone=model_setting['encoder_model_type'], attention=model_setting['encoder_attention']).to(device)
     decoder_cap = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1, attention=model_setting['decoder_bahdanau']).to(
@@ -473,9 +476,19 @@ def main():
     decoder_img = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1, attention=model_setting['decoder_bahdanau']).to(
         device)
 
-    wandb_logger = Logger(f"memes-efficientnet-bahdanau-selfAttention",
-                          project='INM706-EXPERIMENTS', model=decoder_cap)
+    wandb_logger = Logger(f"MEMES-efficientnetB5-BA-selfAttention",
+                          project='INM706-FINAL', model=decoder_cap)
     logger = wandb_logger.get_logger()
+
+    print("\n############## MODEL SETTINGS ##############")
+    print(model_setting)
+    print()
+    print("\n############## TRAIN SETTINGS ##############")
+    print(train_setting)
+    print()
+    n_epochs = train_setting['epochs']
+    print(f"Length of vocabulary: {train_dataset.n_words}")
+
 
     train(train_dataloader, val_dataloader, encoder, decoder_cap, decoder_img, n_epochs, logger, train_dataset,
           print_every=1,plot_every=1, encoder_learning_rate=train_setting['encoder_learning_rate'], decoder_learning_rate=train_setting['decoder_learning_rate'],

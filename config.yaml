@@ -1,9 +1,9 @@
 model:
-    encoder_model_type: 'resnet' # resnet or efficientnet
-    encoder_attention: False # True for multihead selfAttention or False for just CNN
-    decoder_bahdanau: False # True if you want to use Bahdanau. Recommended!
+    encoder_model_type: 'efficientnet' # resnet or efficientnet
+    encoder_attention: True # True for multihead selfAttention or False for just CNN
+    decoder_bahdanau: True # True if you want to use Bahdanau. Recommended!
 train:
-    epochs: 12
+    epochs: 20
     batch_size: 8
     encoder_learning_rate: 0.00001 # 0.00001 for all experiments
     decoder_learning_rate: 0.0001 # 0.0001 for all experiments

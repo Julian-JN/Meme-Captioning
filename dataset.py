@@ -42,7 +42,7 @@ class MemeDatasetFromFile(Dataset):
         # self.transform = transforms.Compose([transforms.Resize((300, 300)),  # Example: Resize to 224x224
         #                                      transforms.ToTensor(),
         #                                      transforms.Normalize([0.5471, 0.5182, 0.49696], [0.2940, 0.2934, 0.2992])])
-        self.transform = transforms.Compose([transforms.Resize((448, 448)),  # Example: Resize to 224x224
+        self.transform = transforms.Compose([transforms.Resize((512, 512)),  # Example: Resize to 224x224
                                              transforms.ToTensor()
                                              ])
         # transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
@@ -57,7 +57,7 @@ class MemeDatasetFromFile(Dataset):
         self.word2count = {}
         self.index2count = {}
         self.index2word = {0: "PAD", 1: "SOS", 2: "EOS", 3:'UNK'}
-        self.n_words = 3  # Count SOS and EOS
+        self.n_words = 4  # Count SOS and EOS and UNK
 
         if voc_init:
             self.voc = self.create_vocab()
@@ -107,7 +107,7 @@ class MemeDatasetFromFile(Dataset):
             self.word2count[word] = 1
         else:
             self.word2count[word] += 1
-            if self.word2count[word] > 2 and word not in self.word2index:  # threshold
+            if self.word2count[word] >= 2 and word not in self.word2index:  # threshold
                 self.word2index[word] = self.n_words
                 self.index2word[self.n_words] = word
                 self.n_words += 1
@@ -142,7 +142,8 @@ class MemeDatasetFromFile(Dataset):
     def normalize_string(self, s):
         s = self.unicode_to_ascii(s.lower().strip())
         s = re.sub(r"([.!?])", r" \1", s)
-        s = re.sub(r"[^a-zA-Z!?]+", r" ", s)
+        # s = re.sub(r"[^a-zA-Z!?]+", r" ", s)
+        s = re.sub(r"[^a-zA-Z'!?]+", r" ", s)  # Include apostrophe in the character set
         return s.strip()
 
     def tokenize_sentence(self, sentence):
@@ -151,6 +152,7 @@ class MemeDatasetFromFile(Dataset):
 
         for text in sentence:
             normalized_text = self.normalize_string(text)
+            print(normalized_text)
             tokenized_text = [self.voc[word] if word in self.voc else 3 for word in normalized_text.split(' ')]
             tokenized_text.append(self.EOS_token)
             max_length.append(len(tokenized_text))
@@ -190,6 +192,7 @@ class MemeDatasetFromFile(Dataset):
             "max_caption":max_caption,
             "max_img":max_img,
             # Proper Bleu eval only works in Batch size 1.
+            # Uncomment code below only during inference
             # "all_captions": torch.tensor(np.array(all_captions), dtype=torch.long, device=device),
             # "all_img_captions": torch.tensor(np.array(all_img_captions), dtype=torch.long, device=device)
 
@@ -203,10 +206,10 @@ if __name__ == "__main__":
 
     train_dataset = MemeDatasetFromFile(path_train)  # Add your image transformations if needed
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=1, shuffle=False)
-
+    print(len(train_dataset))
     instances = 0
     for data in train_dataloader:
-        meme_captions = data["all_captions"].squeeze(1)
-        print(meme_captions.shape)
+
+        # meme_captions = data["all_captions"].squeeze(1)
         instances += 1
     print(instances)

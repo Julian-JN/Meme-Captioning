@@ -28,13 +28,14 @@ class EncoderCNN(nn.Module):
             # torch.save(self.resnet.state_dict(), 'checkpoint/resnet_weights.pth')
             self.model.load_state_dict(torch.load("checkpoint/resnet_weights.pth"))
             self.model = torch.nn.Sequential(*(list(self.model.children())[:-2]))
+            print(self.model)
             num_features = 2048
 
         if backbone == "efficientnet":
-            self.model = EfficientNet.from_pretrained('efficientnet-b0') # Load a pretrained EfficientNet model
+            self.model = EfficientNet.from_pretrained('efficientnet-b5') # Load a pretrained EfficientNet model
             self.model._avg_pooling = nn.Identity()
             self.model._dropout = nn.Identity()
-            num_features = 1280
+            num_features = 2048# 2048 if b5, 1280 if b0
             print(num_features)
             self.model._fc = nn.Identity()
         if attention:
@@ -60,19 +61,20 @@ class EncoderCNN(nn.Module):
                 plt.title("Feature Map from CNN Layer")
                 plt.axis('off')  # Hide axes
                 wandb.log({"Extracted features": wandb.Image(fig)})
-                plt.show() # off when training
+                # plt.show() # off when training
                 plt.close(fig)
 
         if self.model_type == "resnet":
             whole_image_features = self.model(input)
         else:
             whole_image_features = self.model.extract_features(input) # (batch_size, 2048, encoded_image_size, encoded_image_size)
+            # print(whole_image_features.shape)
         weights = 0
         if self.multihead:
             context, weights = self.attention(whole_image_features) # (batch_size, 2048, encoded_image_size, encoded_image_size)
-        whole_image_features = self.adaptive_pool(whole_image_features)  # (batch_size, 2048, 14, 14)
+        # whole_image_features = self.adaptive_pool(whole_image_features)  # (batch_size, 1280, 14, 14)
         whole_image_features = whole_image_features.permute(0, 2, 3, 1)
-        whole_image_features = whole_image_features.contiguous().view(whole_image_features.size(0), -1,  whole_image_features.size(-1)) # (batch_size, 2048, 196)
+        whole_image_features = whole_image_features.contiguous().view(whole_image_features.size(0), -1,  whole_image_features.size(-1)) # (batch_size, 196, 1280)
         return whole_image_features, weights
 
 class AttentionMultiHeadCNN(nn.Module):
@@ -292,7 +294,7 @@ class DecoderLSTM(nn.Module):
         if type(hidden) is tuple:
             hidden, cell = hidden
         if image_feature: # Initial input is an image
-            mean_encoder_out = image.mean(dim=1)  # (batch_size, 196)
+            mean_encoder_out = image.mean(dim=1)  # (batch_size, 1280)
             hidden = self.init_h(mean_encoder_out)  # (batch_size, decoder_dim)
             cell = self.init_c(mean_encoder_out)
 

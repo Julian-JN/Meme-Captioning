@@ -141,7 +141,8 @@ class FlickrDataset(Dataset):
     def normalize_string(self, s):
         s = self.unicode_to_ascii(s.lower().strip())
         s = re.sub(r"([.!?])", r" \1", s)
-        s = re.sub(r"[^a-zA-Z!?]+", r" ", s)
+        # s = re.sub(r"[^a-zA-Z!?]+", r" ", s)
+        s = re.sub(r"[^a-zA-Z'!?]+", r" ", s)  # Include apostrophe in the character set
         return s.strip()
 
     def tokenize_sentence(self, sentence):
@@ -182,6 +183,7 @@ class FlickrDataset(Dataset):
             image = self.transform(image).to(device)
 
         return {
+            "image_name": img_name,
             "image": image,
             "meme_captions": torch.tensor(np.array(img_captions), dtype=torch.long, device=device),
             "max_caption":max_caption,
@@ -194,6 +196,7 @@ if __name__ == "__main__":
 
     train_dataset = FlickrDataset()  # Add your image transformations if needed
     train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=1, shuffle=False)
+    print(len(train_dataset))
 
     instances = 0
     for data in train_dataloader:

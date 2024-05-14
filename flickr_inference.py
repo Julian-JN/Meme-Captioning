@@ -23,6 +23,7 @@ from torch.nn.utils.rnn import pack_padded_sequence
 device = torch.device('cpu')
 if torch.cuda.is_available():
     device = torch.device('cuda')
+torch.manual_seed(0)
 
 
 def visualize_att(image, seq, alphas, mode="cap"):
@@ -47,11 +48,7 @@ def visualize_att(image, seq, alphas, mode="cap"):
 
         plt.imshow(alpha, alpha=0.65, cmap='Greys_r')
         plt.axis('off')
-        if mode == "cap":
-            wandb.log({"Caption Attention": wandb.Image(fig)})
-        elif mode == "img":
-            wandb.log({"Image Caption Attention": wandb.Image(fig)})
-        # plt.show()
+        plt.show()
         plt.close(fig)
 
 def visualize_encoder_attention(img, attention_map):
@@ -79,10 +76,9 @@ def visualize_encoder_attention(img, attention_map):
     plt.subplot(1, 2, 2)
     im = plt.imshow(attention_map, cmap='Greys_r')  # Add attention map
     plt.title('Attention Map')
-    plt.colorbar(im, fraction=0.046, pad=0.04)  # Add colorbar as legend
-    # plt.close(fig)
-    wandb.log({"Encoder Attention": wandb.Image(fig)})
-
+    plt.colorbar(im, fraction=0.046, pad=0.04)  # Add colorbar as legend7
+    plt.show()
+    plt.close(fig)
 
 def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", length=80, plot_encoder_attention=False):
     with torch.no_grad():
@@ -93,7 +89,7 @@ def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", lengt
         else:
             max_cap = length
             target_cap = None
-            plot_feature = True
+            plot_feature = False
 
         encoder_outputs, weights = encoder(input_tensor, plot_feature)
         if plot_encoder_attention:
@@ -209,7 +205,7 @@ def test_epoch(dataloader, encoder, decoder_cap, criterion, output_lang, plot_en
 
         if total_samples % 500 == 0:
 
-            plot_image = False
+            plot_image = True
             if plot_image:
                 converted_list = map(str, references[0])
                 pred = ' '.join(converted_list)
@@ -288,8 +284,7 @@ def main():
     print("Test")
     print(len(test_set))
     val_dataloader = torch.utils.data.DataLoader(val_set, batch_size=train_setting['batch_size'], shuffle=True)
-    test_dataloader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True)
-
+    test_dataloader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False)
     print(f"Length of vocabulary: {train_dataset.n_words}")
 
     encoder = EncoderCNN(backbone=model_setting['encoder_model_type'], attention=model_setting['encoder_attention']).to(
@@ -297,8 +292,8 @@ def main():
     decoder_cap = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1,
                               attention=model_setting['decoder_bahdanau']).to(device)
 
-    load_checkpoint(encoder, "train_checkpoint/Resnet-LSTM_Captions_encoder_ckpt.pth")
-    load_checkpoint(decoder_cap, "train_checkpoint/Resnet-LSTM_Captions_decoder_Cap_ckpt.pth")
+    load_checkpoint(encoder, "train_checkpoint/Efficient-BA-selfAttention-LSTM_Captions_encoder_ckpt.pth")
+    load_checkpoint(decoder_cap, "train_checkpoint/Efficient-BA-selfAttention-LSTM_Captions_decoder_Cap_ckpt.pth")
 
     test(test_dataloader, encoder, decoder_cap, train_dataset,
           plot_encoder_attention=model_setting['encoder_attention'],
