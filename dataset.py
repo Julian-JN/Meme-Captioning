@@ -142,8 +142,8 @@ class MemeDatasetFromFile(Dataset):
     def normalize_string(self, s):
         s = self.unicode_to_ascii(s.lower().strip())
         s = re.sub(r"([.!?])", r" \1", s)
-        # s = re.sub(r"[^a-zA-Z!?]+", r" ", s)
-        s = re.sub(r"[^a-zA-Z'!?]+", r" ", s)  # Include apostrophe in the character set
+        s = re.sub(r"[^a-zA-Z!?]+", r" ", s)
+        #s = re.sub(r"[^a-zA-Z'!?]+", r" ", s)  # Include apostrophe in the character set
         return s.strip()
 
     def tokenize_sentence(self, sentence):

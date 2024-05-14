@@ -39,7 +39,7 @@ def visualize_att(image, seq, alphas, mode="cap"):
         plt.text(0, 1, '%s' % (words[t]), color='black', backgroundcolor='white', fontsize=12)
         plt.imshow(image)
         current_alpha = alphas[0, t, :]
-        if current_alpha.size(0) == 196:
+        if current_alpha.size(0) == 16*16:
             current_alpha = current_alpha.view(-1, 16, 16).squeeze(0)
         else:
             current_alpha = current_alpha.view(-1, 16, 16).squeeze(0).mean(0)  # mean if object detection included
@@ -48,7 +48,7 @@ def visualize_att(image, seq, alphas, mode="cap"):
 
         plt.imshow(alpha, alpha=0.65, cmap='Greys_r')
         plt.axis('off')
-        # plt.show()
+        plt.show()
         plt.close(fig)
 
 def visualize_encoder_attention(img, attention_map):
@@ -322,20 +322,18 @@ def main():
     print()
     n_epochs = train_setting['epochs']
 
-    path_train = "data/memes-trainval.json"
-    train_dataset = MemeDatasetFromFile(path_train)
 
     path_test = "data/memes-test.json"
     test_dataset = MemeDatasetFromFile(path_test)
     test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=1, shuffle=True)
 
-    print(f"Length of vocabulary: {train_dataset.n_words}")
+    print(f"Length of vocabulary: {test_dataset.n_words}")
 
     encoder = EncoderCNN(backbone=model_setting['encoder_model_type'], attention=model_setting['encoder_attention']).to(
         device)
-    decoder_cap = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1,
+    decoder_cap = DecoderLSTM(hidden_size=512, embed_size=300, output_size=test_dataset.n_words, num_layers=1,
                               attention=model_setting['decoder_bahdanau']).to(device)
-    decoder_img = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1,
+    decoder_img = DecoderLSTM(hidden_size=512, embed_size=300, output_size=test_dataset.n_words, num_layers=1,
                               attention=model_setting['decoder_bahdanau']).to(device)
 
     load_checkpoint(encoder, "train_checkpoint/FINAL-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_encoder_ckpt.pth")
@@ -343,7 +341,7 @@ def main():
     load_checkpoint(decoder_img, "train_checkpoint/FINAL-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_img_ckpt.pth")
 
 
-    test(test_dataloader, encoder, decoder_cap, decoder_img, train_dataset,
+    test(test_dataloader, encoder, decoder_cap, decoder_img, test_dataset,
           plot_encoder_attention=model_setting['encoder_attention'],
           plot_decoder_attention=model_setting['decoder_bahdanau'])
     return
