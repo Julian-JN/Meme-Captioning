@@ -300,7 +300,7 @@ class DecoderLSTM(nn.Module):
 
         context, attn_weights = self.attention(hidden, image)
         gate = self.sigmoid(self.s_gate(hidden))
-        context = context * gate
+        context = context * gate # (batch_size, 1280 or 2048)
         input_lstm = torch.cat((input, context), dim=1)
         hidden, cell = self.LSTM(input_lstm, (hidden, cell))
         output = self.out(self.dropout(hidden))

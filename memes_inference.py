@@ -81,7 +81,7 @@ def visualize_encoder_attention(img, attention_map):
     plt.close(fig)
 
 
-def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", length=80, plot_encoder_attention=False):
+def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", length=80):
     with torch.no_grad():
         if mode == "train":
             max_cap = length
@@ -93,17 +93,14 @@ def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", lengt
             plot_feature = False
 
         encoder_outputs, weights = encoder(input_tensor, plot_feature)
-        if plot_encoder_attention:
-            visualize_encoder_attention(input_tensor[0], weights[0])
         caption_output, _, attention_weights = decoder_cap(encoder_outputs, caption,target_tensor=target_cap, max_caption=max_cap)
         caption_output = F.log_softmax(caption_output, dim=-1)
         decoded_caption = token2text(caption_output, voc)
-    return decoded_caption, attention_weights
+    return decoded_caption, attention_weights, weights
 
 
 def calculate_bleu(target, predicted):
     references = [target]
-    # references = [[caption] for caption in target]
     hypotheses = [caption for caption in predicted]
     # Calculate BLEU score
     bleu_score = nltk.translate.bleu_score.corpus_bleu(references, hypotheses, weights=(0.25, 0.25, 0.25, 0.25),
@@ -112,9 +109,10 @@ def calculate_bleu(target, predicted):
 
 
 def calculate_meteor(target, predicted):
-    references = [[caption] for caption in target]
-    hypotheses = [caption for caption in predicted]
-
+    references = target
+    hypotheses = predicted[0]
+    # print(references)
+    # print(hypotheses)
     # Calculate METEOR score
     meteor_score = nltk.translate.meteor_score.meteor_score(references, hypotheses)
     return meteor_score
@@ -205,7 +203,7 @@ def test_epoch(dataloader, encoder, decoder_cap, decoder_img, criterion, output_
             hypothesis_all = alltarget2text(all_captions, output_lang)
         references = F.log_softmax(caption_outputs, dim=-1)
         references = token2text(references, output_lang)
-        bleu_score = calculate_bleu(hypothesis_all, references)
+        bleu_score = calculate_meteor(hypothesis_all, references)
         bleu_loss = bleu_score
 
 
@@ -220,7 +218,7 @@ def test_epoch(dataloader, encoder, decoder_cap, decoder_img, criterion, output_
             hypothesis_all = alltarget2text(all_captions_img, output_lang)
         references_img = F.log_softmax(img_outputs, dim=-1)
         references_img = token2text(references_img, output_lang)
-        bleu_score_img = calculate_bleu(hypothesis_all, references_img)
+        bleu_score_img = calculate_meteor(hypothesis_all, references_img)
         bleu_loss_img = bleu_score_img
 
         loss_attention = 0
@@ -243,10 +241,13 @@ def test_epoch(dataloader, encoder, decoder_cap, decoder_img, criterion, output_
                 plt.title(result)
                 plt.show()
 
-            captions, attention_weights = evaluate(encoder, decoder_cap, images, meme_captions,
-                                                   output_lang, mode="val", length=max_caption,plot_encoder_attention=plot_encoder_attention)
-            img_caption, attention_weights_img = evaluate(encoder, decoder_img, images, img_captions,
-                                                          output_lang, mode="val", length=max_img, plot_encoder_attention=plot_encoder_attention)
+            captions, attention_weights, weights = evaluate(encoder, decoder_cap, images, meme_captions,
+                                                   output_lang, mode="val", length=max_caption)
+            img_caption, attention_weights_img, weights = evaluate(encoder, decoder_img, images, img_captions,
+                                                          output_lang, mode="val", length=max_img)
+            if plot_encoder_attention:
+                visualize_encoder_attention(images[0], weights[0])
+
             if plot_decoder_attention:
                 visualize_att(images, img_caption, attention_weights_img, mode="cap")
 
@@ -306,7 +307,7 @@ def test(test_dataloader, encoder, decoder_cap, decoder_img, output_lang,
     test_loss, metric_loss, metric_loss_img = test_epoch(test_dataloader, encoder, decoder_cap, decoder_img, criterion,output_lang, plot_encoder_attention=plot_encoder_attention, plot_decoder_attention=plot_decoder_attention)
     print(f"Inference: CE-Loss {test_loss}")
     print(f"Inference: BLEU-Loss Caption {metric_loss}")
-    print(f"Inference: BLEU-Loss Caption {metric_loss_img}")
+    print(f"Inference: BLEU-Loss Image Caption {metric_loss_img}")
 
 
 
@@ -336,10 +337,9 @@ def main():
     decoder_img = DecoderLSTM(hidden_size=512, embed_size=300, output_size=test_dataset.n_words, num_layers=1,
                               attention=model_setting['decoder_bahdanau']).to(device)
 
-    load_checkpoint(encoder, "train_checkpoint/FINAL-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_encoder_ckpt.pth")
-    load_checkpoint(decoder_cap, "train_checkpoint/FINAL-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_Cap_ckpt.pth")
-    load_checkpoint(decoder_img, "train_checkpoint/FINAL-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_img_ckpt.pth")
-
+    load_checkpoint(encoder, "train_checkpoint/FINAL_Finer-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_encoder_ckpt.pth")
+    load_checkpoint(decoder_cap, "train_checkpoint/FINAL_Finer-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_Cap_ckpt.pth")
+    load_checkpoint(decoder_img, "train_checkpoint/FINAL_Finer-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_img_ckpt.pth")
 
     test(test_dataloader, encoder, decoder_cap, decoder_img, test_dataset,
           plot_encoder_attention=model_setting['encoder_attention'],

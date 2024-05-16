@@ -187,7 +187,9 @@ class FlickrDataset(Dataset):
             "image": image,
             "meme_captions": torch.tensor(np.array(img_captions), dtype=torch.long, device=device),
             "max_caption":max_caption,
-            "all_captions": torch.tensor(np.array(all_captions), dtype=torch.long, device=device) # Proper Bleu eval only works in Batch size 1
+            # Proper Bleu eval only works in Batch size 1.
+            # Uncomment code below only during inference
+            # "all_captions": torch.tensor(np.array(all_captions), dtype=torch.long, device=device) # Proper Bleu eval only works in Batch size 1
         }
 
 

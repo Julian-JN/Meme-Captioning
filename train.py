@@ -348,7 +348,7 @@ def train(train_dataloader, val_dataloader, encoder, decoder_cap, decoder_img, n
         decoder_learning_rate=1e-4, encoder_learning_rate = 1e-5,
         print_every=100, plot_every=100, plot_encoder_attention=False, plot_decoder_attention=False):
 
-    best_score = float('inf')
+    best_score = float('-inf')
 
     plot_losses = []
     print_loss_total = 0  # Reset every print_every
@@ -402,17 +402,17 @@ def train(train_dataloader, val_dataloader, encoder, decoder_cap, decoder_img, n
         bleu_print_loss_total_img += bleu_loss_img
         bleu_plot_loss_total_img += bleu_loss_img
 
-        # Save best validation model
-        if val_loss < best_score:
-            save_checkpoint(decoder_cap, "MEMES_Finer-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_Cap")
-            save_checkpoint(decoder_img, "MEMES_Finer-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_img")
-            save_checkpoint(encoder, "MEMES_Finer-EfficientB5-BA-selfAttention-LSTM_Captions_encoder")
-            best_score = val_loss
+        # Save best validation model on BLEU Metric
+        if bleu_loss_img > best_score:
+            save_checkpoint(decoder_cap, "MEMES_Final-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_Cap")
+            save_checkpoint(decoder_img, "MEMES_Final-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_img")
+            save_checkpoint(encoder, "MEMES_Final-EfficientB5-BA-selfAttention-LSTM_Captions_encoder")
+            best_score = bleu_loss_img
 
         if epoch == n_epochs:
-            save_checkpoint(decoder_cap, "FINAL_Finer-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_Cap")
-            save_checkpoint(decoder_img, "FINAL_Finer-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_img")
-            save_checkpoint(encoder, "FINAL_Finer-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_encoder")
+            save_checkpoint(decoder_cap, "FINAL_Final-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_Cap")
+            save_checkpoint(decoder_img, "FINAL_Final-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_img")
+            save_checkpoint(encoder, "FINAL_Final-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_encoder")
 
         if epoch % print_every == 0:
             print_loss_avg = print_loss_total / print_every
@@ -476,7 +476,7 @@ def main():
     decoder_img = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1, attention=model_setting['decoder_bahdanau']).to(
         device)
 
-    wandb_logger = Logger(f"MEMES_Finer-efficientnetB5-BA-selfAttention",
+    wandb_logger = Logger(f"MEMES_Final-efficientnetB5-BA-selfAttention",
                           project='INM706-FINAL', model=decoder_cap)
     logger = wandb_logger.get_logger()
 

@@ -45,7 +45,7 @@ def clip_gradient(optimizer, grad_clip):
 
 def visualize_att(image, seq, alphas, mode="cap"):
     image = transforms.ToPILImage()(image[0].unsqueeze(0).squeeze(0))
-    image = image.resize([14 * 24, 14 * 24], Image.LANCZOS)
+    image = image.resize([16 * 24, 16 * 24], Image.LANCZOS)
     # Only plot first element from batch
     caption = seq[0]
     words = caption
@@ -56,12 +56,12 @@ def visualize_att(image, seq, alphas, mode="cap"):
         plt.text(0, 1, '%s' % (words[t]), color='black', backgroundcolor='white', fontsize=12)
         plt.imshow(image)
         current_alpha = alphas[0, t, :]
-        if current_alpha.size(0) == 196:
-            current_alpha = current_alpha.view(-1, 14, 14).squeeze(0)
+        if current_alpha.size(0) == 16*16:
+            current_alpha = current_alpha.view(-1, 16, 16).squeeze(0)
         else:
-            current_alpha = current_alpha.view(-1, 14, 14).squeeze(0).mean(0)  # mean if object detection included
+            current_alpha = current_alpha.view(-1, 16, 16).squeeze(0).mean(0)  # mean if object detection included
 
-        alpha = skimage.transform.resize(current_alpha.cpu().numpy(), [14 * 24, 14 * 24])
+        alpha = skimage.transform.resize(current_alpha.cpu().numpy(), [16 * 24, 16 * 24])
 
         plt.imshow(alpha, alpha=0.65, cmap='Greys_r')
         plt.axis('off')
@@ -327,8 +327,8 @@ def train(train_dataloader, val_dataloader, encoder, decoder_cap, n_epochs, logg
         bleu_plot_loss_total += bleu_loss
 
         if val_loss < best_score:
-            save_checkpoint(decoder_cap, "Efficient-BA-selfAttention-LSTM_Captions_decoder_Cap")
-            save_checkpoint(encoder, "Efficient-BA-selfAttention-LSTM_Captions_encoder")
+            save_checkpoint(decoder_cap, "Flickr-Final-Efficient-BA-selfAttention-LSTM_Captions_decoder_Cap")
+            save_checkpoint(encoder, "Flickr-Final-Efficient-BA-selfAttention-LSTM_Captions_encoder")
             best_score = val_loss
 
         if epoch % print_every == 0:
@@ -383,7 +383,7 @@ def main():
     decoder_cap = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1, attention=model_setting['decoder_bahdanau']).to(
         device)
 
-    wandb_logger = Logger(f"FLICKR-efficientnet-BA-selfAttention",
+    wandb_logger = Logger(f"FLICKR-Final-efficientnet-BA-selfAttention",
                           project='INM706-FINAL', model=decoder_cap)
     logger = wandb_logger.get_logger()
 
