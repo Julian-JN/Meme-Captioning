@@ -2,9 +2,11 @@
 /flickr/
 /img_meme/
 /train_checkpoint/
+/train_checkpoint_old/
 /img/
 /wandb/
 /run_job.sh
 /create_env.sh
 /debug.log
 /.pytest_cache/
+/data.zip

@@ -61,7 +61,7 @@ To replicate the environment and run the code follow these steps (**Warning**: a
 plot_decoder_attention to True or False. 
 - To use a different metric, manually change lines with calculate_bleu()/calculate_meteor(). 
 - Important Note: in the dataset files for each dataset ('dataset.py', 'dataset_flickr.py'), PLEASE uncomment out the lines at the end of the get_item() function, in the return portion, which start with variable names "all_"
-
+- The checkpoints provided use EfficientNetb5 as the encoder, and have feature size of 2048 and attention sizes of 16*16
   - Visualise the results:
 
       Run:
