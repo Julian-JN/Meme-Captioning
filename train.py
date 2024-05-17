@@ -23,7 +23,7 @@ from torch.nn.utils.rnn import pack_padded_sequence
 
 torch.manual_seed(0)
 
-os.environ['https_proxy'] = "http://hpc-proxy00.city.ac.uk:3128"  # Proxy to train with hyperion
+# os.environ['https_proxy'] = "http://hpc-proxy00.city.ac.uk:3128"  # Proxy to train with hyperion
 
 print(torch.cuda.is_available())
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -404,15 +404,15 @@ def train(train_dataloader, val_dataloader, encoder, decoder_cap, decoder_img, n
 
         # Save best validation model on BLEU Metric
         if bleu_loss_img > best_score:
-            save_checkpoint(decoder_cap, "MEMES_Final-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_Cap")
-            save_checkpoint(decoder_img, "MEMES_Final-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_img")
-            save_checkpoint(encoder, "MEMES_Final-EfficientB5-BA-selfAttention-LSTM_Captions_encoder")
+            save_checkpoint(decoder_cap, "MEMES_test_decoder_Cap")
+            save_checkpoint(decoder_img, "MEMES_test_decoder_img")
+            save_checkpoint(encoder, "MEMES_test_encoder")
             best_score = bleu_loss_img
 
         if epoch == n_epochs:
-            save_checkpoint(decoder_cap, "FINAL_Final-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_Cap")
-            save_checkpoint(decoder_img, "FINAL_Final-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_img")
-            save_checkpoint(encoder, "FINAL_Final-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_encoder")
+            save_checkpoint(decoder_cap, "FINAL_test_Cap")
+            save_checkpoint(decoder_img, "FINAL_test_decoder_img")
+            save_checkpoint(encoder, "FINAL_test_encoder")
 
         if epoch % print_every == 0:
             print_loss_avg = print_loss_total / print_every
@@ -477,7 +477,7 @@ def main():
         device)
 
     wandb_logger = Logger(f"MEMES_Final-efficientnetB5-BA-selfAttention",
-                          project='INM706-FINAL', model=decoder_cap)
+                          project='INM706-TEST', model=decoder_cap)
     logger = wandb_logger.get_logger()
 
     print("\n############## MODEL SETTINGS ##############")

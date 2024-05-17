@@ -25,10 +25,12 @@ if torch.cuda.is_available():
     device = torch.device('cuda')
 torch.manual_seed(0)
 
+# If using efficientnet-b0, change 16 for 14 in visualize_att()
+# If you want to use Meteor or Bleu, change manually line with calculate_bleu/calculate_meteor
 
 def visualize_att(image, seq, alphas, mode="cap"):
     image = transforms.ToPILImage()(image[0].unsqueeze(0).squeeze(0))
-    image = image.resize([14 * 24, 14 * 24], Image.LANCZOS)
+    image = image.resize([16 * 24, 16 * 24], Image.LANCZOS)
     # Only plot first element from batch
     caption = seq[0]
     words = caption
@@ -39,12 +41,12 @@ def visualize_att(image, seq, alphas, mode="cap"):
         plt.text(0, 1, '%s' % (words[t]), color='black', backgroundcolor='white', fontsize=12)
         plt.imshow(image)
         current_alpha = alphas[0, t, :]
-        if current_alpha.size(0) == 196:
-            current_alpha = current_alpha.view(-1, 14, 14).squeeze(0)
+        if current_alpha.size(0) == 16*16:
+            current_alpha = current_alpha.view(-1, 16, 16).squeeze(0)
         else:
-            current_alpha = current_alpha.view(-1, 14, 14).squeeze(0).mean(0)  # mean if object detection included
+            current_alpha = current_alpha.view(-1, 16, 16).squeeze(0).mean(0)  # mean if object detection included
 
-        alpha = skimage.transform.resize(current_alpha.cpu().numpy(), [14 * 24, 14 * 24])
+        alpha = skimage.transform.resize(current_alpha.cpu().numpy(), [16 * 24, 16 * 24])
 
         plt.imshow(alpha, alpha=0.65, cmap='Greys_r')
         plt.axis('off')
@@ -197,7 +199,7 @@ def test_epoch(dataloader, encoder, decoder_cap, criterion, output_lang, plot_en
         hypothesis_all = alltarget2text(all_captions, output_lang)
         references = F.log_softmax(caption_outputs, dim=-1)
         references = token2text(references, output_lang)
-        bleu_score = calculate_bleu(hypothesis_all, references)
+        bleu_score = calculate_meteor(hypothesis_all, references)
 
 
         loss_attention = 0
@@ -295,12 +297,12 @@ def main():
     decoder_cap = DecoderLSTM(hidden_size=512, embed_size=300, output_size=train_dataset.n_words, num_layers=1,
                               attention=model_setting['decoder_bahdanau']).to(device)
 
-    load_checkpoint(encoder, "train_checkpoint/Efficient-BA-selfAttention-LSTM_Captions_encoder_ckpt.pth")
-    load_checkpoint(decoder_cap, "train_checkpoint/Efficient-BA-selfAttention-LSTM_Captions_decoder_Cap_ckpt.pth")
+    load_checkpoint(encoder, "train_checkpoint/Flickr-Final-Efficient-BA-selfAttention-LSTM_Captions_encoder_ckpt.pth")
+    load_checkpoint(decoder_cap, "train_checkpoint/Flickr-Final-Efficient-BA-selfAttention-LSTM_Captions_decoder_Cap_ckpt.pth")
 
     test(test_dataloader, encoder, decoder_cap, train_dataset,
-          plot_encoder_attention=model_setting['encoder_attention'],
-          plot_decoder_attention=model_setting['decoder_bahdanau'])
+         plot_encoder_attention=True,
+         plot_decoder_attention=True)
     return
 
 

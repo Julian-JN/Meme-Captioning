@@ -24,7 +24,7 @@ from torch.nn.utils.rnn import pack_padded_sequence
 
 torch.manual_seed(0)
 
-os.environ['https_proxy'] = "http://hpc-proxy00.city.ac.uk:3128"  # Proxy to train with hyperion
+# os.environ['https_proxy'] = "http://hpc-proxy00.city.ac.uk:3128"  # Proxy to train with hyperion
 
 print(torch.cuda.is_available())
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -327,8 +327,8 @@ def train(train_dataloader, val_dataloader, encoder, decoder_cap, n_epochs, logg
         bleu_plot_loss_total += bleu_loss
 
         if val_loss < best_score:
-            save_checkpoint(decoder_cap, "Flickr-Final-Efficient-BA-selfAttention-LSTM_Captions_decoder_Cap")
-            save_checkpoint(encoder, "Flickr-Final-Efficient-BA-selfAttention-LSTM_Captions_encoder")
+            save_checkpoint(decoder_cap, "Flickr-test-decoder")
+            save_checkpoint(encoder, "Flickr-test-encoder")
             best_score = val_loss
 
         if epoch % print_every == 0:
@@ -384,7 +384,7 @@ def main():
         device)
 
     wandb_logger = Logger(f"FLICKR-Final-efficientnet-BA-selfAttention",
-                          project='INM706-FINAL', model=decoder_cap)
+                          project='INM706-TEST', model=decoder_cap)
     logger = wandb_logger.get_logger()
 
     print("\n############## MODEL SETTINGS ##############")

@@ -15,9 +15,10 @@ device = torch.device('cpu')
 if torch.cuda.is_available():
     device = torch.device('cuda')
 
+# NOTE: change 1280 to 2048 if using EfficientNet-B5 or Resnet
 
 class EncoderCNN(nn.Module):
-    def __init__(self, backbone='resnet', attention = True):
+    def __init__(self, backbone='efficientnet', attention = True):
         super(EncoderCNN, self).__init__()
 
         self.model_type = backbone
@@ -26,7 +27,7 @@ class EncoderCNN(nn.Module):
         if backbone == "resnet":
             self.model = torchvision.models.resnet101(pretrained=True)
             # torch.save(self.resnet.state_dict(), 'checkpoint/resnet_weights.pth')
-            self.model.load_state_dict(torch.load("checkpoint/resnet_weights.pth"))
+            # self.model.load_state_dict(torch.load("checkpoint/resnet_weights.pth"))
             self.model = torch.nn.Sequential(*(list(self.model.children())[:-2]))
             print(self.model)
             num_features = 2048
@@ -35,7 +36,7 @@ class EncoderCNN(nn.Module):
             self.model = EfficientNet.from_pretrained('efficientnet-b5') # Load a pretrained EfficientNet model
             self.model._avg_pooling = nn.Identity()
             self.model._dropout = nn.Identity()
-            num_features = 2048# 2048 if b5, 1280 if b0
+            num_features = 2048# 2048 if b5 version, 1280 if b0
             print(num_features)
             self.model._fc = nn.Identity()
         if attention:
@@ -68,7 +69,6 @@ class EncoderCNN(nn.Module):
             whole_image_features = self.model(input)
         else:
             whole_image_features = self.model.extract_features(input) # (batch_size, 2048, encoded_image_size, encoded_image_size)
-            # print(whole_image_features.shape)
         weights = 0
         if self.multihead:
             context, weights = self.attention(whole_image_features) # (batch_size, 2048, encoded_image_size, encoded_image_size)
@@ -210,9 +210,7 @@ class DecoderLSTM(nn.Module):
         else:
             self.LSTM = nn.LSTMCell(embed_size, hidden_size)
 
-        # self.LSTM = nn.LSTM(embed_size + 2048, hidden_size, num_layers, batch_first=True)
-        self.out = nn.Linear(hidden_size, output_size)  # 2 for direction and 2 for image/hidden concat
-        self.num_layers = num_layers
+        self.out = nn.Linear(hidden_size, output_size)
         self.attention = BahdanauAttention(hidden_size)
         if attention:
             self.attention_function = self.forward_step_bahdanau
@@ -249,7 +247,7 @@ class DecoderLSTM(nn.Module):
         decoder_input = self.embedding(decoder_input_start)
         decoder_hidden = feature_outputs
 
-        for i in range(max_length):
+        for i in range(max_length): # decoding tokens
             if i == 0:
                 decoder_output, decoder_hidden, attn_weights = self.attention_function(decoder_input, decoder_hidden,
                                                                                        feature_outputs, True)
@@ -265,12 +263,12 @@ class DecoderLSTM(nn.Module):
                 else:
                     _, topi = decoder_output.topk(1)
                     decoder_input = topi.squeeze(-1).detach()
-                    decoder_input = self.embedding(decoder_input)
+                    decoder_input = self.embedding(decoder_input) # embed tokens
 
-            else:  # validation/no teacher forcing
+            else:  # no teacher forcing
                 _, topi = decoder_output.topk(1)
                 decoder_input = topi.squeeze(-1).detach()
-                decoder_input = self.embedding(decoder_input)
+                decoder_input = self.embedding(decoder_input) # embed tokens
 
         decoder_outputs = torch.cat([tensor.unsqueeze(1) for tensor in decoder_outputs], dim=1)
         if attentions[0] is not None:
@@ -287,21 +285,21 @@ class DecoderLSTM(nn.Module):
             hidden = self.init_h(mean_encoder_out)  # (batch_size, decoder_dim)
             cell = self.init_c(mean_encoder_out)
         hidden, cell = self.LSTM(input, (hidden, cell))
-        output = self.out(self.dropout(hidden))
+        output = self.out(self.dropout(hidden)) # (batch_size, vocab_size)
         return output, (hidden, cell), output
 
     def forward_step_bahdanau(self, input, hidden, image, image_feature):
         if type(hidden) is tuple:
             hidden, cell = hidden
         if image_feature: # Initial input is an image
-            mean_encoder_out = image.mean(dim=1)  # (batch_size, 1280)
+            mean_encoder_out = image.mean(dim=1)  # (batch_size, 1280 or 2048)
             hidden = self.init_h(mean_encoder_out)  # (batch_size, decoder_dim)
             cell = self.init_c(mean_encoder_out)
 
         context, attn_weights = self.attention(hidden, image)
         gate = self.sigmoid(self.s_gate(hidden))
         context = context * gate # (batch_size, 1280 or 2048)
-        input_lstm = torch.cat((input, context), dim=1)
+        input_lstm = torch.cat((input, context), dim=1) # (batch_size, 300 + 2048)
         hidden, cell = self.LSTM(input_lstm, (hidden, cell))
-        output = self.out(self.dropout(hidden))
+        output = self.out(self.dropout(hidden)) # (batch_size, vocab_size)
         return output, (hidden,cell), attn_weights

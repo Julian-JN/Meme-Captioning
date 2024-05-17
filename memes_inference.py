@@ -25,6 +25,9 @@ device = torch.device('cpu')
 if torch.cuda.is_available():
     device = torch.device('cuda')
 
+# If using efficientnet-b0, change 16 for 14 in visualize_att()
+# If you want to use Meteor or Bleu, change manually line with calculate_bleu/calculate_meteor
+
 
 def visualize_att(image, seq, alphas, mode="cap"):
     image = transforms.ToPILImage()(image[0].unsqueeze(0).squeeze(0))
@@ -203,7 +206,7 @@ def test_epoch(dataloader, encoder, decoder_cap, decoder_img, criterion, output_
             hypothesis_all = alltarget2text(all_captions, output_lang)
         references = F.log_softmax(caption_outputs, dim=-1)
         references = token2text(references, output_lang)
-        bleu_score = calculate_meteor(hypothesis_all, references)
+        bleu_score = calculate_bleu(hypothesis_all, references)
         bleu_loss = bleu_score
 
 
@@ -218,7 +221,7 @@ def test_epoch(dataloader, encoder, decoder_cap, decoder_img, criterion, output_
             hypothesis_all = alltarget2text(all_captions_img, output_lang)
         references_img = F.log_softmax(img_outputs, dim=-1)
         references_img = token2text(references_img, output_lang)
-        bleu_score_img = calculate_meteor(hypothesis_all, references_img)
+        bleu_score_img = calculate_bleu(hypothesis_all, references_img)
         bleu_loss_img = bleu_score_img
 
         loss_attention = 0
@@ -342,8 +345,8 @@ def main():
     load_checkpoint(decoder_img, "train_checkpoint/FINAL_Finer-MEMES-EfficientB5-BA-selfAttention-LSTM_Captions_decoder_img_ckpt.pth")
 
     test(test_dataloader, encoder, decoder_cap, decoder_img, test_dataset,
-          plot_encoder_attention=model_setting['encoder_attention'],
-          plot_decoder_attention=model_setting['decoder_bahdanau'])
+         plot_encoder_attention=True,
+         plot_decoder_attention=True)
     return
 
 
