@@ -13,14 +13,7 @@ To replicate the environment and run the code follow these steps (**Warning**: a
     cd Meme-Captioning
     ```
 
-2. Install dependencies
-
-    - Using conda
-        ```bash
-        conda env create -f environment.yml
-        conda activate Meme-Captioning
-        ```
-        * Note: the default environemnt name will be 'Meme-Captioning'; if you wish to modify the name, change the first line fo the environment.yml file before running.
+2. Install dependencies:
 
     - Using pip
         ```bash
