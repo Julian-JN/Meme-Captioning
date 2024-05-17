@@ -46,6 +46,8 @@ To replicate the environment and run the code follow these steps (**Warning**: a
         The train settings allows for configuration of certain hyperparameters, such as epochs, batch size, and learning rates for encoder and decoder.
 
     - Train
+    - Important Note: in the dataset files for each dataset ('dataset.py', 'dataset_flickr.py'), PLEASE comment out the lines at the end of the get_item() function, in the return portion, which start with variable names "all_"
+
         To start the training run the 'train.py' file if you want to run meme captioining and 'train_flickr' if you want to run Flickr captioning: 
         ```bash
         python train.py
@@ -58,7 +60,8 @@ To replicate the environment and run the code follow these steps (**Warning**: a
 
 - To change whether to plot self attention results or not, change in the test() instantiation the parameters plot_encoder_attention,
 plot_decoder_attention to True or False. 
-- To use a different metric, manually change lines with calculate_bleu()/calculate_meteor().    
+- To use a different metric, manually change lines with calculate_bleu()/calculate_meteor(). 
+- Important Note: in the dataset files for each dataset ('dataset.py', 'dataset_flickr.py'), PLEASE uncomment out the lines at the end of the get_item() function, in the return portion, which start with variable names "all_"
 
   - Visualise the results:
 

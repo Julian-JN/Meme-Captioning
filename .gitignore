@@ -7,3 +7,4 @@
 /run_job.sh
 /create_env.sh
 /debug.log
+/.pytest_cache/
