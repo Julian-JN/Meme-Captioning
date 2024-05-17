@@ -27,7 +27,8 @@ To replicate the environment and run the code follow these steps (**Warning**: a
 
      - Checkpoints:
 
-        Dowload checkpoints from: 
+        Dowload checkpoints from here (same as dataset): 
+        https://drive.google.com/drive/folders/1yxOv_ZH9PZ5hunWNYo509ORrOToGW9XB?usp=drive_link
         Please place the downloaded directory in the main 'Meme-Captioning' folder.
 
 
