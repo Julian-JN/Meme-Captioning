@@ -1,4 +1,4 @@
-# MemeCaptioning
+# Meme Captioning
 
 ## Introduction
 This repository contains the code for the deep learning project focused on meme captioning.
@@ -31,6 +31,12 @@ To replicate the environment and run the code follow these steps (**Warning**: a
          To setup WandB logging, you must set the WandB key as an environment variable. An invitation link to the wandB log (INM706-Final) is provided here: https://wandb.ai/citai?invited=&newUser=false
 
 ## Usage
+
+     - Checkpoints:
+
+        Dowload checkpoints from: 
+        Please place the downloaded directory in the main 'Meme-Captioning' folder.
+
 
     - Dataset
 
@@ -67,5 +73,6 @@ plot_decoder_attention to True or False.
 
       Run:
       ```bash
-      python inference.py
+      python memes_inference.py
+      python flickr_inference.py
       ```
