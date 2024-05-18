@@ -77,6 +77,7 @@ class EncoderCNN(nn.Module):
         whole_image_features = whole_image_features.contiguous().view(whole_image_features.size(0), -1,  whole_image_features.size(-1)) # (batch_size, 196, 1280)
         return whole_image_features, weights
 
+# Same code as INM705 CW
 class AttentionMultiHeadCNN(nn.Module):
 
     def __init__(self, input_size, hidden_size, nr_heads):
@@ -288,6 +289,7 @@ class DecoderLSTM(nn.Module):
         output = self.out(self.dropout(hidden)) # (batch_size, vocab_size)
         return output, (hidden, cell), output
 
+    # Helped by this:  https: // github.com / sgrvinod / a - PyTorch - Tutorial - to - Image - Captioning / tree / master
     def forward_step_bahdanau(self, input, hidden, image, image_feature):
         if type(hidden) is tuple:
             hidden, cell = hidden
