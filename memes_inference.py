@@ -114,8 +114,6 @@ def calculate_bleu(target, predicted):
 def calculate_meteor(target, predicted):
     references = target
     hypotheses = predicted[0]
-    # print(references)
-    # print(hypotheses)
     # Calculate METEOR score
     meteor_score = nltk.translate.meteor_score.meteor_score(references, hypotheses)
     return meteor_score

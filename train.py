@@ -43,26 +43,20 @@ def clip_gradient(optimizer, grad_clip):
 
 
 def visualize_att(image, seq, alphas, smooth=False, mode="cap"):
+    # visualize Bahdanau attention
     image = transforms.ToPILImage()(image[0].unsqueeze(0).squeeze(0))
     image = image.resize([16 * 24, 16 * 24], Image.LANCZOS)
     # Only plot first element from batch
     caption = seq[0]
-    # print(caption)
     words = caption
-    # print(alphas.shape)
-    # alphas = alphas[:, :-1]  # remove last weight for resize/visualisation reasons
     for t in range(len(words)):
         if t > 50:
             break
-        # plt.subplot(int(np.ceil(len(words) / 5.)), 5, t + 1)
         fig = plt.figure()
         plt.text(0, 1, '%s' % (words[t]), color='black', backgroundcolor='white', fontsize=12)
         plt.imshow(image)
         current_alpha = alphas[0, t, :]
         current_alpha = current_alpha.view(-1, 16, 16).squeeze(0)
-        # alpha = np.reshape(current_alpha, (224, 224))  # Resize to image dimensions
-        # alpha /= np.max(alpha)
-        # print(current_alpha.shape)
         if smooth:
             alpha = skimage.transform.pyramid_expand(current_alpha.cpu().numpy(), upscale=24, sigma=8)
         else:
@@ -74,7 +68,6 @@ def visualize_att(image, seq, alphas, smooth=False, mode="cap"):
             wandb.log({"Caption Attention": wandb.Image(fig)})
         elif mode == "img":
             wandb.log({"Image Caption Attention": wandb.Image(fig)})
-        # plt.show()
         plt.close(fig)
 
 
@@ -109,7 +102,6 @@ def visualize_encoder_attention(img, attention_map):
 
 def evaluate(encoder, decoder_cap, input_tensor, caption, voc, mode="val", length=80, plot_encoder_attention=False):
     with torch.no_grad():
-        # print(length)
         if mode == "train":
             max_cap = length
             target_cap = caption

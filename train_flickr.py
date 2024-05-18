@@ -44,6 +44,7 @@ def clip_gradient(optimizer, grad_clip):
 
 
 def visualize_att(image, seq, alphas, mode="cap"):
+    # visualize Bahdanau attention
     image = transforms.ToPILImage()(image[0].unsqueeze(0).squeeze(0))
     image = image.resize([16 * 24, 16 * 24], Image.LANCZOS)
     # Only plot first element from batch
@@ -183,18 +184,18 @@ def val_epoch(dataloader, encoder, decoder_cap, criterion, output_lang, plot_enc
     bleu_total = 0
     for data in dataloader:
         images = data["image"]
-        meme_captions = data["meme_captions"].squeeze(1)
+        target_captions = data["target_captions"].squeeze(1) # meme_captions
         max_caption = data["max_caption"]
         total_samples += 1
         with torch.no_grad():
             encoder_outputs, _ = encoder(images, False)
-            caption_outputs, _, attention_weights = decoder_cap(encoder_outputs, meme_captions, None, max_caption)
+            caption_outputs, _, attention_weights = decoder_cap(encoder_outputs, target_captions, None, max_caption)
 
         scores = pack_padded_sequence(caption_outputs, max_caption, batch_first=True, enforce_sorted=False)[0]
-        targets = pack_padded_sequence(meme_captions, max_caption, batch_first=True, enforce_sorted=False)[0]
+        targets = pack_padded_sequence(target_captions, max_caption, batch_first=True, enforce_sorted=False)[0]
         loss = criterion(scores, targets)
 
-        hypothesis = target2text(meme_captions, output_lang)
+        hypothesis = target2text(target_captions, output_lang)
         references = F.log_softmax(caption_outputs, dim=-1)
         references = token2text(references, output_lang)
         bleu_score = calculate_bleu(hypothesis, references)
@@ -206,7 +207,7 @@ def val_epoch(dataloader, encoder, decoder_cap, criterion, output_lang, plot_enc
         bleu_loss = bleu_score
 
         if total_samples % 100 == 0:
-            captions, attention_weights = evaluate(encoder, decoder_cap, images, meme_captions, output_lang, mode="val",
+            captions, attention_weights = evaluate(encoder, decoder_cap, images, target_captions, output_lang, mode="val",
                                                    length=max_caption, plot_encoder_attention=plot_encoder_attention)
             if plot_decoder_attention:
                 visualize_att(images, captions, attention_weights, mode="cap")
@@ -219,7 +220,7 @@ def val_epoch(dataloader, encoder, decoder_cap, criterion, output_lang, plot_enc
             print(f"DataPoint: {total_samples}, Text: {total_text}")
 
             total_target = ""
-            targets_dec = target2text(meme_captions, output_lang)
+            targets_dec = target2text(target_captions, output_lang)
             for caption in targets_dec:
                 converted_list = map(str, caption)
                 result = ' '.join(converted_list)
@@ -244,14 +245,14 @@ def train_epoch(dataloader, encoder, decoder_cap, encoder_optimizer, decoder_opt
     total_samples = 0
     for data in dataloader:
         images = data["image"]
-        meme_captions = data["meme_captions"].squeeze(1)
+        target_captions = data["target_captions"].squeeze(1)
         max_caption = data["max_caption"]
         encoder_outputs,_ = encoder(images)
-        caption_outputs, _, attention_weights = decoder_cap(encoder_outputs, meme_captions,
-                                                            meme_captions, max_caption)
+        caption_outputs, _, attention_weights = decoder_cap(encoder_outputs, target_captions,
+                                                            target_captions, max_caption)
 
         scores = pack_padded_sequence(caption_outputs, max_caption, batch_first=True, enforce_sorted=False)[0]
-        targets = pack_padded_sequence(meme_captions, max_caption, batch_first=True, enforce_sorted=False)[0]
+        targets = pack_padded_sequence(target_captions, max_caption, batch_first=True, enforce_sorted=False)[0]
         loss = criterion(scores, targets)
         loss_attention = 0
 
@@ -400,13 +401,6 @@ def main():
           print_every=1,plot_every=1, encoder_learning_rate=train_setting['encoder_learning_rate'], decoder_learning_rate=train_setting['decoder_learning_rate'],
           plot_encoder_attention=model_setting['encoder_attention'], plot_decoder_attention=model_setting['decoder_bahdanau'])
     return
-
-
-# TODO:
-# Baseline: Resnet vs EfficientNet
-# Improvement: EfficientNet with Bahdanau attention
-# Evaluate: Add self attention to encoder
-
 
 if __name__ == '__main__':
     main()

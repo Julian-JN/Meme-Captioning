@@ -26,7 +26,8 @@ To replicate the environment and run the code follow these steps (**Warning**: a
 ## Usage
 
      - Checkpoints:
-
+        The checkpoints provided use the EfficientNet-b5 encoder with Self-Attention module, and LSTM+Bahdanau attention decoder.
+        If you require checkpoints from other experiments, please send an email to request them (some changes in the code would be required to run them)
         Dowload checkpoints from here (same as dataset): 
         https://drive.google.com/drive/folders/1yxOv_ZH9PZ5hunWNYo509ORrOToGW9XB?usp=drive_link
         Please place the downloaded directory in the main 'Meme-Captioning' folder.
@@ -47,10 +48,11 @@ To replicate the environment and run the code follow these steps (**Warning**: a
 
     - Train
     - Important Note: in the dataset files for each dataset ('dataset.py', 'dataset_flickr.py'), PLEASE comment out the lines at the end of the get_item() function, in the return portion, which start with variable names "all_"
-
-        To start the training run the 'train.py' file if you want to run meme captioining and 'train_flickr' if you want to run Flickr captioning: 
+    These returned variables are only useful during inference, and will crash the program due to batch size
+        To start the training run the 'train.py' file if you want to run meme captioining and 'train_flickr.py' if you want to run Flickr captioning: 
         ```bash
         python train.py
+        python train_flickr.py
         ```
 
 4. Inference and Visualisation of Attention

@@ -192,7 +192,7 @@ class MemeDatasetFromFile(Dataset):
             "max_caption":max_caption,
             "max_img":max_img,
             # Proper Bleu eval only works in Batch size 1.
-            # Uncomment code below only during inference
+            # Uncomment code below only during inference only
             "all_captions": torch.tensor(np.array(all_captions), dtype=torch.long, device=device),
             "all_img_captions": torch.tensor(np.array(all_img_captions), dtype=torch.long, device=device)
 

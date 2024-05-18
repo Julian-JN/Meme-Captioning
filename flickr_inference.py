@@ -117,8 +117,6 @@ def calculate_bleu(target, predicted):
 def calculate_meteor(target, predicted):
     references = target
     hypotheses = predicted[0]
-    # print(references)
-    # print(hypotheses)
     # Calculate METEOR score
     meteor_score = nltk.translate.meteor_score.meteor_score(references, hypotheses)
     return meteor_score
@@ -183,19 +181,19 @@ def test_epoch(dataloader, encoder, decoder_cap, criterion, output_lang, plot_en
     bleu_total = 0
     for data in dataloader:
         images = data["image"]
-        meme_captions = data["meme_captions"].squeeze(1)
+        target_captions = data["target_captions"].squeeze(1)
         all_captions = data["all_captions"].squeeze(1)
         max_caption = data["max_caption"]
         total_samples += 1
         with torch.no_grad():
             encoder_outputs, _ = encoder(images, False)
-            caption_outputs, _, attention_weights = decoder_cap(encoder_outputs, meme_captions, None, max_caption)
+            caption_outputs, _, attention_weights = decoder_cap(encoder_outputs, target_captions, None, max_caption)
 
         scores = pack_padded_sequence(caption_outputs, max_caption, batch_first=True, enforce_sorted=False)[0]
-        targets = pack_padded_sequence(meme_captions, max_caption, batch_first=True, enforce_sorted=False)[0]
+        targets = pack_padded_sequence(target_captions, max_caption, batch_first=True, enforce_sorted=False)[0]
         loss = criterion(scores, targets)
 
-        hypothesis = target2text(meme_captions, output_lang)
+        hypothesis = target2text(target_captions, output_lang)
         hypothesis_all = alltarget2text(all_captions, output_lang)
         references = F.log_softmax(caption_outputs, dim=-1)
         references = token2text(references, output_lang)
@@ -223,7 +221,7 @@ def test_epoch(dataloader, encoder, decoder_cap, criterion, output_lang, plot_en
                 plt.title(result)
                 plt.show()
 
-            captions, attention_weights = evaluate(encoder, decoder_cap, images, meme_captions, output_lang, mode="val",
+            captions, attention_weights = evaluate(encoder, decoder_cap, images, target_captions, output_lang, mode="val",
                                                    length=max_caption, plot_encoder_attention=plot_encoder_attention)
             if plot_decoder_attention:
                 visualize_att(images, captions, attention_weights, mode="cap")
@@ -236,7 +234,7 @@ def test_epoch(dataloader, encoder, decoder_cap, criterion, output_lang, plot_en
             print(f"DataPoint: {total_samples}, Text: {total_text}")
 
             total_target = ""
-            targets_dec = target2text(meme_captions, output_lang)
+            targets_dec = target2text(target_captions, output_lang)
             for caption in targets_dec:
                 converted_list = map(str, caption)
                 result = ' '.join(converted_list)
